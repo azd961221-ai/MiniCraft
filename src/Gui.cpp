@@ -146,6 +146,10 @@ void ContainerScreen::initTabs() {
     add(0, BRICK_STAIRS);
     add(0, STONEBRICK_STAIRS);
     add(0, NETHER_STAIRS);
+    add(0, SANDSTONE_STAIRS);
+    add(0, SPRUCE_STAIRS);
+    add(0, BIRCH_STAIRS);
+    add(0, JUNGLE_STAIRS);
     add(0, COBBLE_WALL, 0);
     add(0, COBBLE_WALL, 1);
     add(0, GLASS);
@@ -214,6 +218,7 @@ void ContainerScreen::initTabs() {
     add(2, IRON_DOOR_ITEM);
     add(2, POWERED_RAIL);
     add(2, DETECTOR_RAIL);
+    add(2, REDSTONE_LAMP_OFF);
 
     // Tab 3: Transportation
     add(3, POWERED_RAIL);
@@ -245,6 +250,8 @@ void ContainerScreen::initTabs() {
     add(4, BED_ITEM);
     add(4, MOB_SPAWNER);
     add(4, MAP);
+    add(4, EXP_BOTTLE);
+    add(4, FIRE_CHARGE);
     for (int r = RECORD_13; r <= RECORD_11; ++r) add(4, (uint16_t)r);
 
     // Tab 6: Foodstuffs

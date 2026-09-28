@@ -1052,6 +1052,7 @@ void MobManager::throwItem(const glm::vec3& from, const glm::vec3& dir, uint16_t
     t.item = item;
     t.damage = damage;
     if (item == POTION) t.motion *= 0.5f / 1.5f; // взрывное зелье летит медленнее (0.5)
+    if (item == EXP_BOTTLE) t.motion *= 0.7f / 1.5f; // пузырёк опыта (EntityExpBottle) — 0.7
     throwables.push_back(t);
 }
 
@@ -2427,6 +2428,16 @@ void MobManager::tick(World& w, Player& p0, TickEvents& pev, std::vector<ItemEnt
                 for (int i = 0; i < 30; ++i) {
                     glm::vec3 spd = glm::vec3(rfl(rng) - 0.5f, rfl(rng) * 0.5f, rfl(rng) - 0.5f) * 0.15f;
                     spawnSpell(particles, hitPos + glm::vec3(rfl(rng) - 0.5f, rfl(rng) * 0.8f, rfl(rng) - 0.5f) * 1.2f, pCol, spd);
+                }
+                hooks.sound("random/glass", 1.f, rfl(rng) * 0.1f + 0.9f, &hitPos);
+                continue;
+            }
+            if (t.item == EXP_BOTTLE) {
+                // Пузырёк опыта разбивается: 3..11 опыта шарами, как EntityExpBottle 1.4.2
+                spawnXpOrbs(orbs, hitPos, 3 + rint(rng, 5) + rint(rng, 5), rng);
+                for (int i = 0; i < 20; ++i) {
+                    glm::vec3 spd = glm::vec3(rfl(rng) - 0.5f, rfl(rng) * 0.5f, rfl(rng) - 0.5f) * 0.15f;
+                    spawnSpell(particles, hitPos + glm::vec3(rfl(rng) - 0.5f, rfl(rng) * 0.8f, rfl(rng) - 0.5f), glm::vec3(0.4f, 0.6f, 1.f), spd);
                 }
                 hooks.sound("random/glass", 1.f, rfl(rng) * 0.1f + 0.9f, &hitPos);
                 continue;

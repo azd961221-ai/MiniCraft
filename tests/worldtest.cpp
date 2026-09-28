@@ -68,6 +68,21 @@ int main(int argc, char** argv) {
         CHECK((w.getMeta(25, Y + 1, 1) & 8) == 0);
     }
 
+    // --- Лампа (1.4.2): от рычага загорается сразу, после выключения гаснет через 4 тика
+    {
+        platform(w, 0, 30, 4, 32, Y);
+        w.setBlock(2, Y + 1, 31, REDSTONE_LAMP_OFF);
+        w.setBlock(1, Y + 1, 31, LEVER, 5 | 8);
+        w.redstoneChanged(1, Y + 1, 31);
+        CHECK(w.getBlock(2, Y + 1, 31) == REDSTONE_LAMP_ON);
+        CHECK(w.getBlockLight(2, Y + 2, 31) >= 13);
+        w.setMeta(1, Y + 1, 31, 5);
+        w.redstoneChanged(1, Y + 1, 31);
+        CHECK(w.getBlock(2, Y + 1, 31) == REDSTONE_LAMP_ON);
+        runTicks(w, t, 6);
+        CHECK(w.getBlock(2, Y + 1, 31) == REDSTONE_LAMP_OFF);
+    }
+
     // --- Грядка: прыжок вытаптывает, посев срывается с метой
     {
         platform(w, 0, 10, 3, 12, Y);

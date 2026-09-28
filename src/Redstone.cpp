@@ -253,6 +253,12 @@ void World::updateComponent(int x, int y, int z) {
         }
         break;
     }
+    case REDSTONE_LAMP_OFF: // BlockRedstoneLight 1.4.2: загорается сразу, гаснет через 4 тика
+        if (inputPower(x, y, z) > 0) setBlock(x, y, z, REDSTONE_LAMP_ON);
+        break;
+    case REDSTONE_LAMP_ON:
+        if (inputPower(x, y, z) == 0) scheduleUpdate(x, y, z, 4);
+        break;
     case NOTE_BLOCK: {
         bool powered = inputPower(x, y, z) > 0;
         bool was = poweredComps_.count(key) != 0;
@@ -349,6 +355,9 @@ void World::redstoneTick(int x, int y, int z) {
     }
     case DISPENSER:
         dispense(x, y, z);
+        break;
+    case REDSTONE_LAMP_ON:
+        if (inputPower(x, y, z) == 0) setBlock(x, y, z, REDSTONE_LAMP_OFF);
         break;
     case STONE_BUTTON:
         if (m & 8) {

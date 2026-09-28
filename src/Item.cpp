@@ -207,6 +207,8 @@ struct Table {
         item(CARROT_ON_A_STICK, "Carrot on a Stick", 6, 6, 1);
         defs[CARROT_ON_A_STICK].maxDamage = 25;
         item(NETHER_STAR, "Nether Star", 9, 11);
+        item(EXP_BOTTLE, "Bottle o' Enchanting", 11, 10);
+        item(FIRE_CHARGE, "Fire Charge", 14, 2);
         item(SKULL_ITEM, "Skeleton Skull", 0, 14); // черепа — строка 14: скелет, иссушитель, зомби, игрок, крипер
         defs[SKULL_ITEM].places = SKULL_BLOCK;
 

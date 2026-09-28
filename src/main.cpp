@@ -3201,12 +3201,12 @@ int main(int argc, char** argv) {
         }
 
         bool splashPotion = held.id == POTION && potionSplash(held.damage);
-        if ((held.id == SNOWBALL || held.id == EGG || held.id == ENDER_PEARL || splashPotion) && !aimingGui &&
+        if ((held.id == SNOWBALL || held.id == EGG || held.id == ENDER_PEARL || splashPotion || held.id == EXP_BOTTLE) && !aimingGui &&
             (g_in.placeClick || (rmb && placeDelay == 0))) {
             float yr = glm::radians(player.yaw);
             glm::vec3 from = player.eye() - glm::vec3(-std::sin(yr) * 0.16f, 0.1f, std::cos(yr) * 0.16f);
             glm::vec3 dir = player.look();
-            if (splashPotion) dir.y += 0.3f; // зелье бросается чуть вверх (-20° в 1.0)
+            if (splashPotion || held.id == EXP_BOTTLE) dir.y += 0.3f; // зелье и пузырёк опыта бросаются чуть вверх (-20°)
             if (mp) {
                 net::Writer w;
                 w.f32(from.x); w.f32(from.y); w.f32(from.z); w.f32(dir.x); w.f32(dir.y); w.f32(dir.z); w.u16(held.id); w.u16(held.damage);
@@ -3468,6 +3468,16 @@ int main(int argc, char** argv) {
                 audio.play("fire/ignite", 1.f, rnd() * 0.4f + 0.8f, &sp);
                 audio.play("random/fuse", 1.f, 1.f, &sp);
                 damageHeld(1);
+                startSwing();
+            } else if (held.id == FIRE_CHARGE && hasHit && g_in.placeClick) {
+                // Огненный шар (ItemFireball 1.4.2): поджигает, как огниво, и тратится
+                glm::ivec3 p = prev;
+                if (world->getBlock(p.x, p.y, p.z) == AIR) {
+                    if (!world->tryCreatePortal(p.x, p.y, p.z)) world->setBlock(p.x, p.y, p.z, FIRE);
+                    glm::vec3 sp = glm::vec3(p) + 0.5f;
+                    audio.play("mob/ghast/fireball", 1.f, (rnd() - rnd()) * 0.2f + 1.f, &sp);
+                    if (!player.creative()) consumeHeld();
+                }
                 startSwing();
             } else if (held.id == FLINT_AND_STEEL && hasHit) {
                 glm::ivec3 p = prev;

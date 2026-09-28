@@ -30,6 +30,7 @@ enum Block : uint8_t {
     POWERED_RAIL, DETECTOR_RAIL,
     EMERALD_ORE, EMERALD_BLOCK, COMMAND_BLOCK, BEACON, ANVIL,
     COBBLE_WALL, FLOWER_POT, CARROTS, POTATOES, WOOD_BUTTON, SKULL_BLOCK, ENDER_CHEST,
+    REDSTONE_LAMP_OFF, REDSTONE_LAMP_ON, SANDSTONE_STAIRS, SPRUCE_STAIRS, BIRCH_STAIRS, JUNGLE_STAIRS,
     BLOCK_COUNT
 };
 
@@ -233,6 +234,12 @@ inline const BlockInfo& blockInfo(uint8_t b) {
         /* WOOD_BUTTON  */ {"Button",         S::Button,      false,  0.5f, So::Wood,   T(4, 0), T(4, 0), T(4, 0), 255, Tl::Axe, -1},
         /* SKULL_BLOCK  */ {"Mob Head",       S::Skull,       false,  1.0f, So::Stone,  T(8, 6), T(8, 6), T(8, 6), 255, Tl::Pickaxe, 0},
         /* ENDER_CHEST  */ {"Ender Chest",    S::Chest,       true,  22.5f, So::Stone,  T(10, 3), T(10, 3), T(9, 3), T(11, 11), Tl::Pickaxe, 0},
+        /* LAMP_OFF     */ {"Redstone Lamp",  S::Cube,        true,   0.3f, So::Glass,  T(3, 13), T(3, 13), T(3, 13), 255, Tl::None, -1},
+        /* LAMP_ON      */ {"Redstone Lamp",  S::Cube,        true,   0.3f, So::Glass,  T(4, 13), T(4, 13), T(4, 13), 255, Tl::None, -1},
+        /* SAND_STAIRS  */ {"Sandstone Stairs", S::Stairs,    true,   0.8f, So::Stone,  T(0, 11), T(0, 13), T(0, 12), 255, Tl::Pickaxe, 0},
+        /* SPRUCE_STAIRS*/ {"Spruce Wood Stairs", S::Stairs,  true,   2.0f, So::Wood,   T(6, 12), T(6, 12), T(6, 12), 255, Tl::Axe, -1},
+        /* BIRCH_STAIRS */ {"Birch Wood Stairs", S::Stairs,   true,   2.0f, So::Wood,   T(6, 13), T(6, 13), T(6, 13), 255, Tl::Axe, -1},
+        /* JUNGLE_STAIRS*/ {"Jungle Wood Stairs", S::Stairs,  true,   2.0f, So::Wood,   T(7, 12), T(7, 12), T(7, 12), 255, Tl::Axe, -1},
     };
     return INFO[b < BLOCK_COUNT ? b : 0];
 }
@@ -255,7 +262,8 @@ inline bool isReplaceable(uint8_t b) {
     return b == AIR || b == TALL_GRASS || b == DEAD_BUSH || b == SNOW_LAYER || b == WATER || b == LAVA || b == FIRE;
 }
 inline bool isStairs(uint8_t b) {
-    return b == WOOD_STAIRS || b == COBBLE_STAIRS || b == BRICK_STAIRS || b == STONEBRICK_STAIRS || b == NETHER_STAIRS;
+    return b == WOOD_STAIRS || b == COBBLE_STAIRS || b == BRICK_STAIRS || b == STONEBRICK_STAIRS || b == NETHER_STAIRS ||
+           b == SANDSTONE_STAIRS || b == SPRUCE_STAIRS || b == BIRCH_STAIRS || b == JUNGLE_STAIRS;
 }
 inline bool isDoor(uint8_t b) { return b == WOOD_DOOR || b == IRON_DOOR; }
 // Сторона 0..3 (+X, +Z, -X, -Z) -> индекс направления (0 +X, 1 -X, 2 +Y, 3 -Y, 4 +Z, 5 -Z)
@@ -279,7 +287,8 @@ inline bool isRepeater(uint8_t b) { return b == REPEATER_ON || b == REPEATER_OFF
 inline bool isRedstoneBlock(uint8_t b) {
     return b == REDSTONE_WIRE || isRedstoneTorch(b) || isRepeater(b) || b == LEVER || b == STONE_BUTTON || b == WOOD_BUTTON || b == STONE_PLATE ||
            b == WOOD_PLATE || b == NOTE_BLOCK || b == TNT || b == WOOD_DOOR || b == IRON_DOOR || b == TRAPDOOR ||
-           b == PISTON || b == STICKY_PISTON || b == DISPENSER || b == POWERED_RAIL || b == DETECTOR_RAIL;
+           b == PISTON || b == STICKY_PISTON || b == DISPENSER || b == POWERED_RAIL || b == DETECTOR_RAIL || b == REDSTONE_LAMP_OFF ||
+           b == REDSTONE_LAMP_ON;
 }
 // Предмет-«блок», который игрок не держит в руках (ставится предметом)
 inline bool isItemOnlyBlock(uint8_t b) {
@@ -396,6 +405,7 @@ inline int lightEmission(uint8_t b) {
     case BROWN_MUSHROOM: return 1;
     case BEACON: return 15;
     case ENDER_CHEST: return 7;
+    case REDSTONE_LAMP_ON: return 15;
     default: return 0;
     }
 }

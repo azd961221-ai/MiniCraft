@@ -128,9 +128,14 @@ struct Book {
         // Полублоки (3 штуки в 1.0) и ступеньки (4 штуки)
         const uint16_t slabMats[6] = {STONE, SANDSTONE, PLANKS, COBBLE, BRICK, STONE_BRICK};
         for (int i = 0; i < 6; ++i) shaped(makeStack(SLAB, 3, (uint16_t)i), S{"###"}, {{'#', slabMats[i]}});
-        const std::pair<uint16_t, uint16_t> stairs[] = {
-            {PLANKS, WOOD_STAIRS}, {COBBLE, COBBLE_STAIRS}, {BRICK, BRICK_STAIRS}, {STONE_BRICK, STONEBRICK_STAIRS}};
+        const std::pair<uint16_t, uint16_t> stairs[] = {{COBBLE, COBBLE_STAIRS}, {BRICK, BRICK_STAIRS}, {STONE_BRICK, STONEBRICK_STAIRS},
+                                                        {SANDSTONE, SANDSTONE_STAIRS}};
         for (auto [mat, st] : stairs) shaped(makeStack(st, 4), S{"#  ", "## ", "###"}, {{'#', mat}});
+        // Деревянные ступени 1.4.2 — своей породы
+        const uint16_t woodStairs[4] = {WOOD_STAIRS, SPRUCE_STAIRS, BIRCH_STAIRS, JUNGLE_STAIRS};
+        for (uint16_t d = 0; d < 4; ++d) shapedI(makeStack(woodStairs[d], 4), S{"#  ", "## ", "###"}, {{'#', Ingredient(PLANKS, d)}});
+        shaped(makeStack(REDSTONE_LAMP_OFF), S{" R ", "RGR", " R "}, {{'R', REDSTONE}, {'G', GLOWSTONE}});
+        shapeless(makeStack(FIRE_CHARGE, 3), {Ingredient(GUNPOWDER), Ingredient(BLAZE_POWDER), Ingredient(COAL)});
 
         shaped(makeStack(LADDER, 2), S{"# #", "###", "# #"}, {{'#', STICK}});
         shaped(makeStack(WOOD_DOOR_ITEM), S{"##", "##", "##"}, {{'#', PLANKS}});
@@ -373,6 +378,7 @@ std::vector<ItemStack> blockDrops(uint8_t block, uint8_t meta, uint32_t& rng) {
     case SKULL_BLOCK: return {makeStack(SKULL_ITEM, 1, (uint16_t)(meta & 7))};
     case ENDER_CHEST: return {makeStack(OBSIDIAN, 8)};
     case COMMAND_BLOCK: return {};
+    case REDSTONE_LAMP_ON: return {makeStack(REDSTONE_LAMP_OFF)};
     default: return {makeStack(block)};
     }
 }
@@ -407,7 +413,7 @@ int fuelTicks(const ItemStack& f) {
     case COAL: return 1600;
     case LOG: case PLANKS: case CRAFTING_TABLE: case CHEST: case BOOKSHELF: return 300;
     case STICK: case SAPLING: case WOOD_BUTTON: return 100;
-    case FENCE: case WOOD_STAIRS: case TRAPDOOR: case FENCE_GATE: case NOTE_BLOCK: case JUKEBOX: case WOOD_PLATE: case CARROT_ON_A_STICK: return 300;
+    case FENCE: case WOOD_STAIRS: case SPRUCE_STAIRS: case BIRCH_STAIRS: case JUNGLE_STAIRS: case TRAPDOOR: case FENCE_GATE: case NOTE_BLOCK: case JUKEBOX: case WOOD_PLATE: case CARROT_ON_A_STICK: return 300;
     case LAVA_BUCKET: return 20000;
     default: return 0;
     }
