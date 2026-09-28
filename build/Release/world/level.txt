@@ -1,0 +1,9 @@
+name=world
+seed=4054730616
+gameMode=0
+hardcore=false
+lastPlayed=1790449473
+dimension=0
+achievements=0
+cartDistance=0
+generator=2

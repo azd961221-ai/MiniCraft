@@ -1,0 +1,5 @@
+name=World
+seed=3274460680
+gameMode=0
+hardcore=false
+lastPlayed=1790375430

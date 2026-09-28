@@ -1,0 +1,9 @@
+name=Multiplayer
+seed=4054730616
+gameMode=0
+hardcore=false
+lastPlayed=0
+dimension=0
+achievements=1
+cartDistance=0
+generator=2

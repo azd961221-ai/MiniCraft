@@ -1,0 +1,10 @@
+^C:\USERS\KIRILL\DOCUMENTS\CLAI\MINICRAFT\BUILD\CMAKEFILES\1672083A3874331E12AF108646D0FF4D\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Kirill/Documents/Clai/MiniCraft -BC:/Users/Kirill/Documents/Clai/MiniCraft/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/Kirill/Documents/Clai/MiniCraft/build/MiniCraft.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

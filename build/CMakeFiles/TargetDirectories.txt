@@ -1,0 +1,7 @@
+C:/Users/Kirill/Documents/Clai/MiniCraft/build/CMakeFiles/MiniCraft.dir
+C:/Users/Kirill/Documents/Clai/MiniCraft/build/CMakeFiles/MiniCraftServer.dir
+C:/Users/Kirill/Documents/Clai/MiniCraft/build/CMakeFiles/mpbot.dir
+C:/Users/Kirill/Documents/Clai/MiniCraft/build/CMakeFiles/worldtest.dir
+C:/Users/Kirill/Documents/Clai/MiniCraft/build/CMakeFiles/selftest.dir
+C:/Users/Kirill/Documents/Clai/MiniCraft/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/Kirill/Documents/Clai/MiniCraft/build/CMakeFiles/ZERO_CHECK.dir

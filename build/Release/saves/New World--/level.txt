@@ -1,0 +1,10 @@
+name=New World
+seed=3414465832
+gameMode=0
+hardcore=false
+lastPlayed=1790535647
+dimension=0
+achievements=0
+cartDistance=0
+generator=3
+cheats=false
