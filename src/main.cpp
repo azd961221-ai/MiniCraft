@@ -1232,6 +1232,9 @@ int main(int argc, char** argv) {
         Image trapImg, enchImg, alchImg, repairImg, beaconImg;
         load("gui/beacon.png", beaconImg);
         guiTex2.beacon = makeTexture(beaconImg);
+        Image tradingImg;
+        load("gui/trading.png", tradingImg);
+        guiTex2.trading = makeTexture(tradingImg);
         load("gui/trap.png", trapImg);
         load("gui/enchant.png", enchImg);
         load("gui/alchemy.png", alchImg);
@@ -1720,6 +1723,13 @@ int main(int argc, char** argv) {
 
     glm::ivec3 anvilPos(0); // наковальня, чьё окно открыто
     glm::ivec3 beaconPos(0); // маяк, чьё окно открыто
+    uint32_t merchantId = 0;               // житель, с которым торгуем
+    std::vector<MerchantRecipe> mpOffers;  // сетевая игра: сделки жителя от сервера
+    auto merchantMob = [&]() -> Mob* {
+        for (auto& m : mobMgr.mobs)
+            if (m.id == merchantId && m.type == MobType::Villager && !m.dying() && !m.removed) return &m;
+        return nullptr;
+    };
     std::vector<std::pair<glm::ivec3, int>> activeBeacons; // работающие маяки рядом и уровни пирамиды (раз в 80 тиков)
     auto makeCtx = [&](float mxG, float myG) {
         GuiContext c{ui, guiTex2, lastSc, lastW, lastH, mxG, myG, inv, throwItem};
@@ -1727,6 +1737,19 @@ int main(int argc, char** argv) {
         c.creative = player.creative();
         c.effects = &player.effects;
         if (gui.kind == GuiKind::Beacon && world) c.beaconLevels = beaconLevels(*world, beaconPos.x, beaconPos.y, beaconPos.z);
+        if (gui.kind == GuiKind::Merchant) {
+            Mob* vm = mp ? nullptr : merchantMob();
+            c.offers = mp ? &mpOffers : vm ? &vm->offers : nullptr;
+        }
+        c.onTrade = [&](int idx) {
+            if (mp) {
+                net::Writer w; w.u32(merchantId); w.u16((uint16_t)idx);
+                netConn.send(C_TRADE, w);
+                if (idx >= 0 && idx < (int)mpOffers.size()) ++mpOffers[(size_t)idx].uses; // до ответа сервера
+            } else if (Mob* vm = merchantMob()) {
+                useTradeRecipe(vm->offers, vm->trade, idx);
+            }
+        };
         c.onBeaconConfirm = [&](uint8_t m) {
             if (world && world->getBlock(beaconPos.x, beaconPos.y, beaconPos.z) == BEACON)
                 world->setBlock(beaconPos.x, beaconPos.y, beaconPos.z, BEACON, m); // в сети уходит правкой блока
@@ -1758,6 +1781,11 @@ int main(int argc, char** argv) {
 
     auto closeGui = [&]() {
         if (mp && mpOpenKind >= 0) { netConn.send(C_CLOSE); mpOpenKind = -1; }
+        if (gui.kind == GuiKind::Merchant) {
+            if (mp) netConn.send(C_CLOSE); // сервер отпускает жителя
+            else if (Mob* vm = merchantMob()) vm->tradingWith = 0;
+            merchantId = 0;
+        }
         GuiContext ctx = makeCtx(0, 0);
         if (gui.kind == GuiKind::Chest) audio.play("random/chestclosed", 0.5f, rnd() * 0.1f + 0.9f);
         gui.close(ctx);
@@ -2520,6 +2548,11 @@ int main(int argc, char** argv) {
             if (g_in.screen == Screen::Container && gui.kind == GuiKind::Beacon && world &&
                 world->getBlock(beaconPos.x, beaconPos.y, beaconPos.z) != BEACON)
                 closeGui();
+            if (g_in.screen == Screen::Container && gui.kind == GuiKind::Merchant && !mp) {
+                // Житель погиб, пропал или ушёл далеко — торговля заканчивается
+                Mob* vm = merchantMob();
+                if (!vm || glm::length(vm->pos - player.pos) > 16.f || player.dead) closeGui();
+            }
             if (g_in.screen == Screen::Container && gui.kind == GuiKind::Chest && gui.tile &&
                 (world->getBlock(gui.tile->x, gui.tile->y, gui.tile->z) == CHEST || world->getBlock(gui.tile->x, gui.tile->y, gui.tile->z) == ENDER_CHEST))
                 openKey = posKey(gui.tile->x, gui.tile->y, gui.tile->z);
@@ -3035,6 +3068,13 @@ int main(int argc, char** argv) {
                     // Сесть на осёдланную свинью (1.0: рулить нельзя, свинья бродит сама; слезть — Shift)
                     ridingPigId = mob->id;
                     mob->ridden = true;
+                    g_in.placeClick = false;
+                } else if (mob->type == MobType::Villager && !mob->dying() && mob->growingAge >= 0 && !mob->tradingWith && !player.dead) {
+                    // Торговля (EntityVillager.interact 1.4.2): при первой встрече у жителя появляется одна сделка
+                    if (mob->offers.empty()) addVillagerOffers(mob->offers, mob->color % 5, gameRng, 1);
+                    mob->tradingWith = 1;
+                    merchantId = mob->id;
+                    openGui(GuiKind::Merchant, nullptr);
                     g_in.placeClick = false;
                 } else if (mobMgr.interact(*mob, held, player, items, particles, mobHooks, gameRng, consume, rep)) {
                     if (held.id == SHEARS) damageHeld(1);
@@ -4852,6 +4892,28 @@ int main(int argc, char** argv) {
             case S_PLAYERDATA: loadPlayerBlob(r); break;
             case S_KEEPALIVE: { net::Writer w; w.u32(r.u32()); netConn.send(C_KEEPALIVE, w); break; }
             case S_LIGHTNING: showLightning(readVec3(r)); break;
+            case S_TRADE: {
+                // Сделки жителя: открыть окно торговли или обновить его
+                uint32_t mid = r.u32();
+                int n = r.u8();
+                std::vector<MerchantRecipe> offers((size_t)n);
+                for (auto& o : offers) {
+                    o.buy1 = readItem(r);
+                    o.buy2 = readItem(r);
+                    o.sell = readItem(r);
+                    o.uses = r.u8() ? o.maxUses : 0;
+                }
+                if (!r.ok) break;
+                mpOffers = std::move(offers);
+                if (g_in.screen == Screen::Container && gui.kind == GuiKind::Merchant && merchantId == mid) break;
+                if (g_in.screen == Screen::Playing && !player.dead) {
+                    merchantId = mid;
+                    openGui(GuiKind::Merchant, nullptr);
+                } else {
+                    netConn.send(C_CLOSE); // окно уже не открыть — отпустить жителя
+                }
+                break;
+            }
             case S_PLAYER_LIST: {
                 std::vector<ListEntry> pl;
                 int n = r.u16();
@@ -5076,6 +5138,17 @@ int main(int argc, char** argv) {
                 openGui(GuiKind::Beacon, nullptr);
                 gui.openBeacon(beaconMeta(1, 1));
                 inv.slots[8] = makeStack(IRON_INGOT, 5);
+            }
+            if (std::getenv("MC_SHOW_TRADE")) { // житель-кузнец с шестью сделками и открытым окном торговли
+                Mob& v = mobMgr.spawn(MobType::Villager, glm::vec3(o) + glm::vec3(-1.5f, 0.f, 8.5f), 180.f);
+                v.color = 3;
+                uint32_t tr = 5;
+                while (v.offers.size() < 6) addVillagerOffers(v.offers, 3, tr, 1);
+                v.tradingWith = 1;
+                merchantId = v.id;
+                openGui(GuiKind::Merchant, nullptr);
+                inv.slots[8] = makeStack(EMERALD, 64);
+                inv.slots[7] = makeStack(COAL, 64);
             }
             world->setBlock(o.x, o.y + 2, o.z + 9, ENDER_CHEST, 5); // эндер-сундук у игрока (ПКМ — личный инвентарь)
             world->setBlock(o.x, o.y + 2, o.z + 10, ANVIL, 1);      // наковальня рядом (ремонт)

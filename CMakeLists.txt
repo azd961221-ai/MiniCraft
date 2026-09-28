@@ -31,6 +31,7 @@ add_executable(MiniCraft
     src/Piston.cpp
     src/Portal.cpp
     src/Enchant.cpp
+    src/Trade.cpp
     src/Vehicle.cpp
     src/Player.cpp
     src/Item.cpp
@@ -74,6 +75,7 @@ add_executable(MiniCraftServer
     src/Item.cpp
     src/Crafting.cpp
     src/Enchant.cpp
+    src/Trade.cpp
     src/Saves.cpp
     src/Vehicle.cpp
     src/Mob.cpp
@@ -103,7 +105,7 @@ endif()
 add_executable(worldtest
     tests/worldtest.cpp
     src/World.cpp src/WorldGen.cpp src/WorldGen10.cpp src/Mesher.cpp src/Liquid.cpp src/Physics.cpp src/Fire.cpp
-    src/Redstone.cpp src/Piston.cpp src/Portal.cpp src/Item.cpp src/Crafting.cpp src/Enchant.cpp src/Saves.cpp
+    src/Redstone.cpp src/Piston.cpp src/Portal.cpp src/Item.cpp src/Crafting.cpp src/Enchant.cpp src/Trade.cpp src/Saves.cpp
     src/Vehicle.cpp src/Mob.cpp src/Entity.cpp src/Player.cpp src/Model.cpp src/GameLogic.cpp src/Map.cpp src/Village10.cpp src/Stronghold10.cpp src/Fortress10.cpp
 )
 target_link_libraries(worldtest PRIVATE glad::glad glm::glm)
@@ -113,7 +115,7 @@ if(MSVC)
 endif()
 
 # Проверки игровой логики без окна: build\Release\selftest.exe
-add_executable(selftest tests/selftest.cpp src/Item.cpp src/Crafting.cpp src/Enchant.cpp)
+add_executable(selftest tests/selftest.cpp src/Item.cpp src/Crafting.cpp src/Enchant.cpp src/Trade.cpp)
 target_link_libraries(selftest PRIVATE glm::glm)
 if(MSVC)
     target_compile_options(selftest PRIVATE /W3 /utf-8)

@@ -349,12 +349,32 @@ int main(int argc, char** argv) {
         Player p;
         p.pos = glm::vec3(-18, Y + 1, -30);
         p.enderChest.items[5] = makeStack(DIAMOND, 7); // эндер-сундук игрока сохраняется там же (хвост EC01)
+        // Сделки жителя (хвост TR01) привязаны к своему мобу
+        mm.spawn(MobType::Pig, glm::vec3(-18, Y + 1, -29), 0.f);
+        uint32_t trng = 77;
+        {
+            Mob& v = mm.spawn(MobType::Villager, glm::vec3(-17, Y + 1, -29), 0.f);
+            v.color = 3;
+            addVillagerOffers(v.offers, 3, trng, 3);
+            v.offers[0].uses = 5;
+            v.trade.timer = 17;
+            v.trade.refresh = true;
+        }
+        const std::vector<MerchantRecipe> savedOffers = mm.mobs.back().offers;
         CHECK(mm.save(dir + "entities.sav", p, nullptr));
         MobManager m2;
         std::vector<ItemEntity> its;
         Player p2;
         CHECK(m2.load(dir + "entities.sav", p2, &its));
         CHECK(p2.enderChest.items[5].id == DIAMOND && p2.enderChest.items[5].count == 7 && p2.enderChest.items[0].empty());
+        CHECK(m2.mobs.size() == 2 && m2.mobs[0].offers.empty() && m2.mobs[1].type == MobType::Villager);
+        if (m2.mobs.size() == 2) {
+            const Mob& v2 = m2.mobs[1];
+            CHECK(v2.offers.size() == savedOffers.size() && v2.trade.timer == 17 && v2.trade.refresh);
+            for (size_t i = 0; i < v2.offers.size() && i < savedOffers.size(); ++i)
+                CHECK(v2.offers[i].buy1.sameItem(savedOffers[i].buy1) && v2.offers[i].buy1.count == savedOffers[i].buy1.count &&
+                      v2.offers[i].sell.sameItem(savedOffers[i].sell) && v2.offers[i].uses == savedOffers[i].uses);
+        }
         CHECK(m2.paintings.size() == 1 && m2.paintings[0].frame && m2.paintings[0].item.id == DIAMOND_SWORD &&
               m2.paintings[0].rotation == 3 && m2.paintings[0].dir == 2);
         uint32_t rng = 9;

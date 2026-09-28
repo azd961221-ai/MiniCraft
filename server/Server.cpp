@@ -405,6 +405,20 @@ int main() {
         if (!b) b = &w0.createTile(pb.x, pb.y, pb.z, TileEntity::Chest);
         return true;
     };
+    // Сделки жителя клиенту (S_TRADE): открыть окно или обновить после сделки
+    auto sendTrade = [&](Client& c, const Mob& m) {
+        net::Writer w;
+        w.u32(m.id);
+        size_t n = std::min<size_t>(m.offers.size(), 255);
+        w.u8((uint8_t)n);
+        for (size_t i = 0; i < n; ++i) {
+            writeItem(w, m.offers[i].buy1);
+            writeItem(w, m.offers[i].buy2);
+            writeItem(w, m.offers[i].sell);
+            w.u8(m.offers[i].disabled() ? 1 : 0);
+        }
+        c.conn.send(S_TRADE, w);
+    };
     auto sendContainer = [&](Client& c) {
         TileEntity* te = containerOf(c);
         if (!te) return;
@@ -831,6 +845,11 @@ int main() {
                             m.riderId = c.id;
                             ride = 2;
                             rideId = m.id;
+                        } else if (m.type == MobType::Villager && m.growingAge >= 0 && !m.tradingWith && !c.proxy.dead) {
+                            // Торговля: житель занят этим игроком, клиенту — список сделок (он откроет окно)
+                            if (m.offers.empty()) addVillagerOffers(m.offers, m.color % 5, rng, 1);
+                            m.tradingWith = c.id;
+                            sendTrade(c, m);
                         } else {
                             dmp->mobs.interact(m, held, c.proxy, dmp->items, dmp->particles, hk, rng, consume, rep);
                         }
@@ -1076,7 +1095,21 @@ int main() {
                     }
                     break;
                 }
+                case C_TRADE: {
+                    uint32_t mid = r.u32();
+                    int idx = r.u16();
+                    if (!r.ok) break;
+                    for (auto& m : dmp->mobs.mobs) {
+                        if (m.id != mid || m.type != MobType::Villager || m.tradingWith != c.id) continue;
+                        useTradeRecipe(m.offers, m.trade, idx);
+                        sendTrade(c, m);
+                        break;
+                    }
+                    break;
+                }
                 case C_CLOSE: {
+                    for (auto& m : dmp->mobs.mobs)
+                        if (m.tradingWith == c.id) m.tradingWith = 0;
                     if (c.openKind == 0 && dmp->world->getBlock(c.openPos.x, c.openPos.y, c.openPos.z) == CHEST) {
                         glm::vec3 sp = glm::vec3(c.openPos) + 0.5f;
                         soundAt(c.dim, "random/chestclosed", 0.5f, rnd() * 0.1f + 0.9f, &sp);
@@ -1161,8 +1194,10 @@ int main() {
             if (c.conn.alive) { ++it; continue; }
             if (c.logged) {
                 for (auto& [d, dm] : dims)
-                    for (auto& m : dm->mobs.mobs)
+                    for (auto& m : dm->mobs.mobs) {
                         if (m.riderId == c.id) { m.ridden = false; m.riderId = 0; }
+                        if (m.tradingWith == c.id) m.tradingWith = 0;
+                    }
                 net::Writer w; w.u32(c.id);
                 broadcast(S_PLAYER_DEL, w, &c);
                 chatAll(c.name + " left the game");

@@ -68,6 +68,9 @@ void ContainerScreen::open(GuiKind k, TileEntity* te, TileEntity* te2) {
     craftOut_.clear();
     scrollRow_ = 0;
     wantClose = false;
+    tradeIdx_ = 0;
+    tradeRecipe_ = -1;
+    tradeOut_.clear();
     if (k == GuiKind::Creative) {
         if (palette_.empty()) initTabs();
     }
@@ -416,6 +419,9 @@ void ContainerScreen::close(GuiContext& ctx) {
     giveBack(anvilIn_[0]);
     giveBack(anvilIn_[1]);
     giveBack(beaconPay_);
+    giveBack(tradeIn_[0]);
+    giveBack(tradeIn_[1]);
+    tradeOut_.clear();
     anvilOut_.clear();
     anvilCost_ = 0;
     trashStack_.clear();
@@ -490,6 +496,15 @@ std::vector<ContainerScreen::Slot> ContainerScreen::slots(GuiContext& ctx) {
         if (tile)
             for (int r = 0; r < 3; ++r)
                 for (int c = 0; c < 3; ++c) add(62.f + c * 18, 17.f + r * 18, &tile->items[r * 3 + c], Role::Normal, CONTAINER, r * 3 + c);
+        playerInv(84, 142);
+        break;
+    case GuiKind::Merchant:
+        add(36, 24, &tradeShow_[0], Role::Display, OUTPUT, 10);
+        add(62, 24, &tradeShow_[1], Role::Display, OUTPUT, 11);
+        add(120, 24, &tradeShow_[2], Role::Display, OUTPUT, 12);
+        add(36, 53, &tradeIn_[0], Role::Normal, CONTAINER, 0);
+        add(62, 53, &tradeIn_[1], Role::Normal, CONTAINER, 1);
+        add(120, 53, &tradeOut_, Role::TradeOut, OUTPUT, 2);
         playerInv(84, 142);
         break;
     case GuiKind::Beacon:
@@ -734,6 +749,8 @@ void ContainerScreen::shiftMove(GuiContext& ctx, Slot& sl) {
         if (--s.count == 0) s.clear();
     } else if (kind == GuiKind::Anvil) {
         moveInto(s, anvilIn_, 2);
+    } else if (kind == GuiKind::Merchant) {
+        moveInto(s, tradeIn_, 2);
     } else if (kind == GuiKind::Enchant && enchantItem_.empty() && itemEnchantability(s.id) > 0) {
         enchantItem_ = s;
         enchantItem_.count = 1;
@@ -779,6 +796,37 @@ void ContainerScreen::clickSlot(GuiContext& ctx, Slot& sl, int button, bool shif
         if (!cursor.empty()) { cursor.clear(); return; } // творческий: клик по палитре удаляет предмет
         cursor = s;
         cursor.count = (uint8_t)(button == 0 ? maxStackSize(s.id) : 1);
+        return;
+    }
+
+    if (sl.role == Role::Display) return; // показ сделки — не слот
+
+    if (sl.role == Role::TradeOut) {
+        // Забрать товар (SlotMerchantResult): плата списывается из слотов, жителю засчитывается сделка;
+        // с Shift — повторять, пока хватает платы и места
+        for (int guard = 0; guard < 64; ++guard) {
+            updateTrade(ctx);
+            if (tradeOut_.empty() || tradeRecipe_ < 0 || !ctx.offers) return;
+            ItemStack r = tradeOut_;
+            if (shift) {
+                Inventory probe = ctx.inv;
+                if (!probe.add(r)) return;
+                r = tradeOut_;
+                ctx.inv.add(r);
+            } else if (cursor.empty()) {
+                cursor = r;
+            } else if (cursor.sameItem(r) && cursor.count + r.count <= maxStackSize(r.id)) {
+                cursor.count = (uint8_t)(cursor.count + r.count);
+            } else {
+                return;
+            }
+            int idx = tradeRecipe_;
+            payForTrade((*ctx.offers)[(size_t)idx], tradeIn_[0], tradeIn_[1]);
+            if (ctx.onTrade) ctx.onTrade(idx);
+            tradeOut_.clear();
+            if (!shift) break;
+        }
+        updateTrade(ctx);
         return;
     }
 
@@ -899,10 +947,38 @@ void ContainerScreen::clickSlot(GuiContext& ctx, Slot& sl, int button, bool shif
             std::swap(s, cursor);
         }
     }
-    if (sl.group == CONTAINER) { updateCraft(); if (kind == GuiKind::Anvil) updateAnvil(); }
+    if (sl.group == CONTAINER) { updateCraft(); if (kind == GuiKind::Anvil) updateAnvil(); if (kind == GuiKind::Merchant) updateTrade(ctx); }
+}
+
+// Выбранная сделка на показ и товар по плате в слотах (InventoryMerchant.resetRecipeAndSlots)
+void ContainerScreen::updateTrade(const GuiContext& ctx) {
+    for (auto& s : tradeShow_) s.clear();
+    tradeOut_.clear();
+    tradeRecipe_ = -1;
+    if (!ctx.offers || ctx.offers->empty()) return;
+    tradeIdx_ = std::clamp(tradeIdx_, 0, (int)ctx.offers->size() - 1);
+    const MerchantRecipe& cur = (*ctx.offers)[(size_t)tradeIdx_];
+    tradeShow_[0] = cur.buy1;
+    tradeShow_[1] = cur.buy2;
+    tradeShow_[2] = cur.sell;
+    tradeRecipe_ = findTradeRecipe(*ctx.offers, tradeIn_[0], tradeIn_[1], tradeIdx_);
+    if (tradeRecipe_ >= 0) tradeOut_ = (*ctx.offers)[(size_t)tradeRecipe_].sell;
 }
 
 void ContainerScreen::mouseDown(GuiContext& ctx, int button, bool shift) {
+    if (kind == GuiKind::Merchant && button == 0 && ctx.offers) {
+        // Стрелки выбора сделки (GuiButtonMerchant 12x19)
+        float px = (ctx.W - panelW()) / 2, py = (ctx.H - panelH()) / 2;
+        for (int d = 0; d < 2; ++d) {
+            float bx = d == 0 ? 147.f : 17.f;
+            if (ctx.mx < px + bx || ctx.mx >= px + bx + 12 || ctx.my < py + 23 || ctx.my >= py + 42) continue;
+            int n = (int)ctx.offers->size();
+            if (d == 0 && tradeIdx_ < n - 1) ++tradeIdx_;
+            if (d == 1 && tradeIdx_ > 0) --tradeIdx_;
+            updateTrade(ctx);
+            return;
+        }
+    }
     if (kind == GuiKind::Beacon && button == 0) {
         float px = (ctx.W - panelW()) / 2, py = (ctx.H - panelH()) / 2;
         for (const BeaconBtn& b : beaconButtons(ctx)) {
@@ -1067,6 +1143,27 @@ void ContainerScreen::draw(GuiContext& ctx) {
         }
         break;
     }
+    case GuiKind::Merchant: {
+        // GuiMerchant 1.4.2: сделка сверху (плата → товар), стрелки листают сделки, закрытая — красный крест
+        updateTrade(ctx);
+        img(ctx.tex.trading, 0, 0, 0, 0, 176, 166);
+        const char* t = "Villager";
+        float tw = ui.textWidth(t, sc) / sc;
+        ui.text(t, (px + 88 - tw / 2) * sc, (py + 6) * sc, sc, titleCol, false);
+        title("Inventory", 8, 72);
+        int n = ctx.offers ? (int)ctx.offers->size() : 0;
+        for (int d = 0; d < 2; ++d) {
+            float bx = d == 0 ? 147.f : 17.f;
+            bool en = d == 0 ? tradeIdx_ < n - 1 : tradeIdx_ > 0;
+            bool hover = ctx.mx >= px + bx && ctx.mx < px + bx + 12 && ctx.my >= py + 23 && ctx.my < py + 42;
+            img(ctx.tex.trading, bx, 23, !en ? 200.f : hover ? 188.f : 176.f, d == 0 ? 0.f : 19.f, 12, 19);
+        }
+        if (n > 0 && (*ctx.offers)[(size_t)tradeIdx_].disabled()) {
+            img(ctx.tex.trading, 83, 21, 212, 0, 28, 21);
+            img(ctx.tex.trading, 83, 51, 212, 0, 28, 21);
+        }
+        break;
+    }
     case GuiKind::Beacon: {
         // GuiBeacon 1.4.2: окно 230x219, значки платы, кнопки 22x22 (фон — полоса v=219: обычная, выбранная,
         // недоступная, под курсором), на кнопке — значок эффекта из inventory.png
@@ -1227,7 +1324,7 @@ void ContainerScreen::draw(GuiContext& ctx) {
     for (auto& sl : s) drawItemStack(ui, ctx.tex, *sl.stack, sl.x, sl.y, sc);
 
     Slot* hover = slotAt(s, ctx);
-    if (hover) ui.rect(hover->x * sc, hover->y * sc, (hover->x + 16) * sc, (hover->y + 16) * sc, {1, 1, 1, 0.5f});
+    if (hover && hover->role != Role::Display) ui.rect(hover->x * sc, hover->y * sc, (hover->x + 16) * sc, (hover->y + 16) * sc, {1, 1, 1, 0.5f});
 
     // Предмет на курсоре
     drawItemStack(ui, ctx.tex, cursor, ctx.mx - 8, ctx.my - 8, sc);

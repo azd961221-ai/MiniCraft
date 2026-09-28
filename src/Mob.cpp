@@ -1195,6 +1195,12 @@ void MobManager::tick(World& w, Player& p0, TickEvents& pev, std::vector<ItemEnt
         glm::vec3 center = m.pos + glm::vec3(0, mobHeight(m) * 0.5f, 0);
 
         if (m.type == MobType::EnderCrystal) continue; // висит на столбе и вращается
+        if (m.type == MobType::Villager && !m.tradingWith && tickTradeState(m.offers, m.trade, m.color % 5, rng)) {
+            // Житель обновил товар: регенерация и зелёные искры (updateAITick 1.4.2)
+            m.health = std::min(mobDef(m.type).maxHealth, m.health + 4);
+            for (int i = 0; i < 6; ++i)
+                spawnSpell(particles, m.pos + glm::vec3(rfl(rng) - 0.5f, 1.f + rfl(rng), rfl(rng) - 0.5f), glm::vec3(0.3f, 1.f, 0.3f));
+        }
         if (m.type == MobType::EnderDragon) {
             if (m.dying()) {
                 // Смерть: поднимается, сыплет взрывами, через 200 тиков исчезает и открывает портал выхода
@@ -1635,6 +1641,12 @@ void MobManager::tick(World& w, Player& p0, TickEvents& pev, std::vector<ItemEnt
                 // уже выбрали, куда идти
             } else if (m.type == MobType::Wolf && m.sitting) {
                 forward = 0.f;
+            } else if (m.type == MobType::Villager && m.tradingWith) {
+                // Торгует: стоит и смотрит на покупателя (EntityAITradePlayer, EntityAILookAtTradePlayer)
+                forward = 0.f;
+                m.hasWander = false;
+                m.path.clear();
+                wantYaw = glm::degrees(std::atan2(toPlayer.z, toPlayer.x));
             } else if (m.fleeTicks > 0) {
                 // Паника: точка в стороне от игрока, новая — раз в ~секунду или когда добежали
                 --m.fleeTicks;
@@ -2570,6 +2582,27 @@ bool MobManager::save(const std::string& path, const Player& p, const std::vecto
     const uint32_t EC = 0x31304345; // "EC01": содержимое эндер-сундука игрока (27 слотов)
     std::fwrite(&EC, 4, 1, f);
     std::fwrite(p.enderChest.items, sizeof(ItemStack), 27, f);
+    // "TR01": сделки жителей (номер среди сохранённых мобов, таймер обновления, сделки)
+    const uint32_t TR = 0x31305254;
+    std::fwrite(&TR, 4, 1, f);
+    uint32_t nt = 0, idx = 0;
+    for (auto& m : mobs) nt += !m.dying() && !m.offers.empty();
+    std::fwrite(&nt, 4, 1, f);
+    for (auto& m : mobs) {
+        if (m.dying()) continue;
+        if (!m.offers.empty()) {
+            int32_t hdr[4] = {(int32_t)idx, m.trade.timer, m.trade.refresh ? 1 : 0, (int32_t)m.offers.size()};
+            std::fwrite(hdr, 4, 4, f);
+            for (const MerchantRecipe& r : m.offers) {
+                std::fwrite(&r.buy1, sizeof(ItemStack), 1, f);
+                std::fwrite(&r.buy2, sizeof(ItemStack), 1, f);
+                std::fwrite(&r.sell, sizeof(ItemStack), 1, f);
+                int32_t u[2] = {r.uses, r.maxUses};
+                std::fwrite(u, 4, 2, f);
+            }
+        }
+        ++idx;
+    }
     bool ok = !std::ferror(f);
     ok = std::fclose(f) == 0 && ok;
     return ok && commitFile(tmpPath, path);
@@ -2686,6 +2719,31 @@ bool MobManager::loadFrom(const std::string& path, Player& p, std::vector<ItemEn
                 if (std::fread(&ec, 4, 1, f) == 1 && ec == 0x31304345 && std::fread(ender, sizeof(ItemStack), 27, f) == 27)
                     for (int i = 0; i < 27; ++i)
                         p.enderChest.items[i] = ender[i].empty() || !isValidItem(ender[i].id) ? ItemStack{} : ender[i];
+                uint32_t tr = 0, nt = 0;
+                if (ec == 0x31304345 && std::fread(&tr, 4, 1, f) == 1 && tr == 0x31305254 && std::fread(&nt, 4, 1, f) == 1)
+                    for (uint32_t i = 0; i < nt && i < 100000; ++i) {
+                        int32_t hdr[4];
+                        if (std::fread(hdr, 4, 4, f) != 4 || hdr[3] < 0 || hdr[3] > 256) break;
+                        std::vector<MerchantRecipe> offers((size_t)hdr[3]);
+                        bool rok = true;
+                        for (auto& r : offers) {
+                            int32_t u[2];
+                            rok = std::fread(&r.buy1, sizeof(ItemStack), 1, f) == 1 && std::fread(&r.buy2, sizeof(ItemStack), 1, f) == 1 &&
+                                  std::fread(&r.sell, sizeof(ItemStack), 1, f) == 1 && std::fread(u, 4, 2, f) == 2;
+                            if (!rok) break;
+                            r.uses = u[0];
+                            r.maxUses = u[1];
+                            if (!isValidItem(r.buy1.id)) r.buy1 = makeStack(EMERALD);
+                            if (!r.buy2.empty() && !isValidItem(r.buy2.id)) r.buy2.clear();
+                            if (!isValidItem(r.sell.id)) r.sell = makeStack(EMERALD);
+                        }
+                        if (!rok) break;
+                        size_t mi = first + (size_t)hdr[0];
+                        if (hdr[0] < 0 || mi >= mobs.size() || mobs[mi].type != MobType::Villager) continue;
+                        mobs[mi].offers = std::move(offers);
+                        mobs[mi].trade.timer = hdr[1];
+                        mobs[mi].trade.refresh = hdr[2] != 0;
+                    }
             }
         }
     }

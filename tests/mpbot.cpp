@@ -1,5 +1,5 @@
 // Тестовый бот для мультиплеера: подключается к MiniCraftServer, стоит/ходит, выбрасывает предметы, бьёт мобов,
-// ломает и ставит блоки и печатает, что прислал сервер. Запуск: mpbot [адрес[:порт]] [имя] [секунд]
+// ломает и ставит блоки, торгует с жителем рядом и печатает, что прислал сервер. Запуск: mpbot [адрес[:порт]] [имя] [секунд]
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -16,7 +16,8 @@ struct BotMob { uint32_t id; int type; float x, y, z; int health; bool dying; };
 struct BotItem { uint32_t id; float x, y, z; ItemStack s; };
 const char* MOB_NAMES[] = {"pig", "cow", "sheep", "chicken", "zombie", "skeleton", "spider", "creeper", "wolf", "squid", "slime",
                            "enderman", "silverfish", "cavespider", "mooshroom", "snowgolem", "villager", "pigzombie", "ghast",
-                           "blaze", "magmacube", "dragon", "crystal"};
+                           "blaze", "magmacube", "dragon", "crystal", "witherskeleton", "wither", "witch", "bat",
+                           "irongolem", "ocelot", "cat", "zombievillager"};
 double now() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 } // namespace
 
@@ -47,6 +48,9 @@ int main(int argc, char** argv) {
     const double t0 = now();
     double nextTick = t0, lastReport = t0;
     int phase = 0;
+    int tradeState = 0; // 0 ищем жителя, 1 ждём окно, 2 ждём подтверждения сделки, 3 пауза, 4 открыли снова, 5 готово
+    double tradeAt = 0;
+    bool reopen = false;
     uint32_t attackId = 0;
     int attackHealthBefore = -1;
     int maxMobs = 0, maxItems = 0;
@@ -96,6 +100,35 @@ int main(int argc, char** argv) {
                 int dmg = r.u16(); int src = (int8_t)r.u8();
                 ++damages;
                 log("DAMAGE " + std::to_string(dmg) + " src=" + std::to_string(src));
+                break;
+            }
+            case S_TRADE: {
+                // Торговля: первое S_TRADE — окно открылось (берём сделку 0), второе — обновление после сделки
+                uint32_t mid = r.u32();
+                int n = r.u8();
+                std::string s = "TRADE villager=" + std::to_string(mid) + " offers=" + std::to_string(n) + ":";
+                for (int i = 0; i < n && r.ok; ++i) {
+                    ItemStack b1 = readItem(r), b2 = readItem(r), sl = readItem(r);
+                    int closed = r.u8();
+                    s += " [" + std::to_string(b1.id) + "x" + std::to_string(b1.count) + (b2.empty() ? "" : "+" + std::to_string(b2.id)) + "->" +
+                         std::to_string(sl.id) + "x" + std::to_string(sl.count) + (closed ? " closed" : "") + "]";
+                }
+                log(r.ok ? s : "!!! S_TRADE parse error");
+                if (tradeState == 1) {
+                    net::Writer w; w.u32(mid); w.u16(0);
+                    conn.send(C_TRADE, w);
+                    log("sent C_TRADE offer 0");
+                    tradeState = 2;
+                } else if (tradeState == 2) {
+                    conn.send(C_CLOSE);
+                    log("trade confirmed by server, sent C_CLOSE");
+                    tradeState = 3;
+                    tradeAt = now();
+                } else if (tradeState == 4) {
+                    conn.send(C_CLOSE);
+                    log("reopened: villager restocked after the last offer (expect one more offer)");
+                    tradeState = 5;
+                }
                 break;
             }
             case S_BLOCKS: blocks += (int)r.u32(); break;
@@ -151,12 +184,26 @@ int main(int argc, char** argv) {
             }
             return best;
         };
+        if (tradeState == 3 && now() - tradeAt > 3.0) { // через 40 тиков после сделки с последней позицией — новый товар
+            tradeState = 0;
+            reopen = true;
+        }
+        if (tradeState == 0 && t > 3.0) {
+            for (auto& m : mobs)
+                if (m.type == 16 && !m.dying && std::hypot(m.x - px, m.z - pz) < 10.f) {
+                    net::Writer w; w.u32(m.id); writeItem(w, ItemStack{});
+                    conn.send(C_INTERACT, w);
+                    log("right-click villager " + std::to_string(m.id));
+                    tradeState = reopen ? 4 : 1;
+                    break;
+                }
+        }
         if (phase == 0 && t > 4.0) {
             phase = 1;
             std::map<int, int> byType;
             for (auto& m : mobs) ++byType[m.type];
             std::string s = "MOBS in snapshot: " + std::to_string(mobs.size()) + " (";
-            for (auto& [k, v] : byType) s += std::string(MOB_NAMES[k < 23 ? k : 0]) + "=" + std::to_string(v) + " ";
+            for (auto& [k, v] : byType) s += std::string(MOB_NAMES[k < 31 ? k : 0]) + "=" + std::to_string(v) + " ";
             log(s + ")  items=" + std::to_string(items.size()));
             if (const BotMob* m = nearestMob()) {
                 char b[160];

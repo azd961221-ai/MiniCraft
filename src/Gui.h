@@ -4,13 +4,14 @@
 #include <vector>
 #include "Inventory.h"
 #include "Player.h"
+#include "Trade.h"
 #include "UI.h"
 
-enum class GuiKind { None, Inventory, Creative, Crafting, Furnace, Chest, Dispenser, Enchant, Brewing, Anvil, Beacon };
+enum class GuiKind { None, Inventory, Creative, Crafting, Furnace, Chest, Dispenser, Enchant, Brewing, Anvil, Beacon, Merchant };
 
 struct GuiTextures {
     GLuint gui = 0, inventory = 0, crafting = 0, furnace = 0, container = 0, allitems = 0, items = 0, terrain = 0, trap = 0;
-    GLuint enchant = 0, alchemy = 0, repair = 0, beacon = 0;
+    GLuint enchant = 0, alchemy = 0, repair = 0, beacon = 0, trading = 0;
     GLuint creativeList = 0, creativeSearch = 0, creativeSurvival = 0;
 };
 
@@ -30,6 +31,8 @@ struct GuiContext {
     std::function<void()> onAnvilUse; // взяли результат с наковальни (износ наковальни, звук)
     int beaconLevels = 0;                        // уровни пирамиды под открытым маяком
     std::function<void(uint8_t)> onBeaconConfirm; // маяк: подтвердили выбор (новая мета блока)
+    const std::vector<MerchantRecipe>* offers = nullptr; // житель: сделки (nullptr — окно закроется)
+    std::function<void(int)> onTrade;                    // житель: совершена сделка с этим номером
 };
 
 // Предмет в слоте 16x16 (x, y — левый верхний угол в единицах GUI), с количеством и износом
@@ -57,7 +60,7 @@ public:
     void hotkey(GuiContext& ctx, int hotbarSlot);
 
 private:
-    enum class Role { Normal, CraftOut, FurnaceOut, Armor, Palette, AnvilOut };
+    enum class Role { Normal, CraftOut, FurnaceOut, Armor, Palette, AnvilOut, TradeOut, Display };
     enum Group { HOTBAR, MAIN, CONTAINER, ARMOR, OUTPUT, PALETTE };
     struct Slot {
         float x, y;
@@ -67,6 +70,9 @@ private:
         int index;
     };
 
+    ItemStack tradeIn_[2], tradeOut_, tradeShow_[3]; // житель: плата, результат, показ выбранной сделки
+    int tradeIdx_ = 0, tradeRecipe_ = -1;            // выбранная сделка; подходящая к плате (-1 — нет)
+    void updateTrade(const GuiContext& ctx);
     ItemStack beaconPay_;
     int beaconPrim_ = 0, beaconSec_ = 0;
     struct BeaconBtn {

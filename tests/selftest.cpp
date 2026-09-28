@@ -6,6 +6,7 @@
 #include <string>
 #include "../src/Crafting.h"
 #include "../src/Inventory.h"
+#include "../src/Trade.h"
 
 static int failures = 0;
 #define CHECK(cond)                                                              \
@@ -183,6 +184,39 @@ int main(int argc, char** argv) {
         a[3].addEnch(ENCH_FEATHER_FALLING, 4);
         CHECK(armorProtectionPoints(a, 2) == 18);
         CHECK(armorProtectionPoints(a, 0) == 0);
+    }
+
+    // Торговля с жителями (1.4.2)
+    {
+        uint32_t rng = 1234;
+        for (int prof = 0; prof < 5; ++prof) {
+            std::vector<MerchantRecipe> offers;
+            addVillagerOffers(offers, prof, rng, 1);
+            CHECK(offers.size() == 1);
+            for (int k = 0; k < 20; ++k) addVillagerOffers(offers, prof, rng, 1);
+            bool emeraldEverywhere = true;
+            for (auto& r : offers) emeraldEverywhere &= r.buy1.id == EMERALD || r.sell.id == EMERALD || r.buy2.id == EMERALD;
+            CHECK(emeraldEverywhere && offers.size() >= 2 && offers.size() <= 30);
+        }
+        std::vector<MerchantRecipe> o(2);
+        o[0].buy1 = makeStack(WHEAT_ITEM, 20); o[0].sell = makeStack(EMERALD);
+        o[1].buy1 = makeStack(EMERALD, 3); o[1].sell = makeStack(IRON_SWORD);
+        ItemStack a = makeStack(WHEAT_ITEM, 25), b;
+        CHECK(findTradeRecipe(o, a, b, 0) == 0);
+        CHECK(findTradeRecipe(o, b, a, 0) == 0);                       // во втором слоте тоже подходит
+        CHECK(findTradeRecipe(o, makeStack(WHEAT_ITEM, 19), b, 0) == -1); // мало
+        CHECK(findTradeRecipe(o, a, b, 1) == -1);                      // выбрана другая сделка
+        CHECK(payForTrade(o[0], a, b) && a.count == 5);
+        TradeState st;
+        useTradeRecipe(o, st, 0);
+        CHECK(o[0].uses == 1 && st.timer == 0);
+        for (int i = 0; i < 7; ++i) useTradeRecipe(o, st, 1);
+        CHECK(o[1].disabled() && st.timer == 40 && st.refresh);
+        CHECK(findTradeRecipe(o, makeStack(EMERALD, 5), b, 1) == -1); // закрытая сделка
+        size_t before = o.size();
+        bool refreshed = false;
+        for (int i = 0; i < 40; ++i) refreshed |= tickTradeState(o, st, 3, rng);
+        CHECK(refreshed && !o[1].disabled() && o.size() >= before);
     }
 
     std::printf(failures ? "\n%d check(s) FAILED\n" : "All checks passed\n", failures);

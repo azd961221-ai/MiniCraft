@@ -8,6 +8,7 @@
 #include "Entity.h"
 #include "Model.h"
 #include "Particles.h"
+#include "Trade.h"
 #include "Player.h"
 #include "Vehicle.h"
 #include "World.h"
@@ -78,6 +79,9 @@ struct Mob {
     int swingTicks = -1;     // взмах рукой при ударе: 0..8 тиков, -1 — не машет
     float swing = 0.f, prevSwing = 0.f; // фаза взмаха 0..1 (swingProgress)
     int teleportDelay = 0;   // эндермен: ожидание телепорта к далёкому игроку
+    std::vector<MerchantRecipe> offers; // житель: сделки (пусто — ещё ни с кем не торговал)
+    TradeState trade;                   // житель: обновление товара после сделки
+    uint32_t tradingWith = 0;           // житель: кто сейчас торгует (0 — никто, 1 — одиночная игра, иначе id игрока)
 
     bool dying() const { return deathTime >= 0; }
 };
