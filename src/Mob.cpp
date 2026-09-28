@@ -2555,6 +2555,9 @@ bool MobManager::save(const std::string& path, const Player& p, const std::vecto
         std::fwrite(v, 4, 5, f);
         std::fwrite(&pt.item, sizeof(ItemStack), 1, f);
     }
+    const uint32_t EC = 0x31304345; // "EC01": содержимое эндер-сундука игрока (27 слотов)
+    std::fwrite(&EC, 4, 1, f);
+    std::fwrite(p.enderChest.items, sizeof(ItemStack), 27, f);
     bool ok = !std::ferror(f);
     ok = std::fclose(f) == 0 && ok;
     return ok && commitFile(tmpPath, path);
@@ -2666,6 +2669,11 @@ bool MobManager::loadFrom(const std::string& path, Player& p, std::vector<ItemEn
                         if (q.item.empty() || !isValidItem(q.item.id)) q.item.clear();
                         paintings.push_back(q);
                     }
+                uint32_t ec = 0;
+                ItemStack ender[27];
+                if (std::fread(&ec, 4, 1, f) == 1 && ec == 0x31304345 && std::fread(ender, sizeof(ItemStack), 27, f) == 27)
+                    for (int i = 0; i < 27; ++i)
+                        p.enderChest.items[i] = ender[i].empty() || !isValidItem(ender[i].id) ? ItemStack{} : ender[i];
             }
         }
     }

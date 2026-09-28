@@ -39,6 +39,7 @@ struct ActiveEffect {
 
 struct Player {
     uint32_t netId = 0;               // номер игрока на сервере (0 — одиночная игра)
+    TileEntity enderChest;            // личный эндер-сундук (1.4.2): 27 слотов, общий для всех эндер-сундуков
     glm::vec3 pos{0.5f, 80.f, 0.5f}; // центр ступней
     glm::vec3 prevPos{0.5f, 80.f, 0.5f};
     glm::vec3 motion{0.f};           // блоков за тик

@@ -38,6 +38,7 @@ public:
     ItemStack cursor;           // предмет «на мышке»
     TileEntity* tile = nullptr; // печь или сундук
     TileEntity* tile2 = nullptr; // вторая половина двойного сундука (нижние 27 слотов)
+    bool enderChest = false;     // окно эндер-сундука (заголовок «Ender Chest»)
     int enchantShelves = 0;     // книжные полки вокруг стола зачарования
 
     void open(GuiKind k, TileEntity* te = nullptr, TileEntity* te2 = nullptr);

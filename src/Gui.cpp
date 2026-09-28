@@ -61,6 +61,7 @@ void ContainerScreen::open(GuiKind k, TileEntity* te, TileEntity* te2) {
     kind = k;
     tile = te;
     tile2 = k == GuiKind::Chest ? te2 : nullptr;
+    enderChest = false;
     craftW_ = k == GuiKind::Crafting ? 3 : 2;
     for (auto& c : craft_) c.clear();
     craftOut_.clear();
@@ -900,7 +901,7 @@ void ContainerScreen::draw(GuiContext& ctx) {
         int rows = chestRows();
         img(ctx.tex.container, 0, 0, 0, 0, 176, rows * 18.f + 17);
         img(ctx.tex.container, 0, rows * 18.f + 17, 0, 126, 176, 96);
-        title(tile2 ? "Large chest" : "Chest", 8, 6);
+        title(enderChest ? "Ender Chest" : tile2 ? "Large chest" : "Chest", 8, 6);
         title("Inventory", 8, panelH() - 96 + 2);
         break;
     }

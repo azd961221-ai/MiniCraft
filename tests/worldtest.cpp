@@ -286,10 +286,13 @@ int main(int argc, char** argv) {
         std::filesystem::create_directories(std::filesystem::u8path(dir));
         Player p;
         p.pos = glm::vec3(-18, Y + 1, -30);
+        p.enderChest.items[5] = makeStack(DIAMOND, 7); // эндер-сундук игрока сохраняется там же (хвост EC01)
         CHECK(mm.save(dir + "entities.sav", p, nullptr));
         MobManager m2;
         std::vector<ItemEntity> its;
-        CHECK(m2.load(dir + "entities.sav", p, &its));
+        Player p2;
+        CHECK(m2.load(dir + "entities.sav", p2, &its));
+        CHECK(p2.enderChest.items[5].id == DIAMOND && p2.enderChest.items[5].count == 7 && p2.enderChest.items[0].empty());
         CHECK(m2.paintings.size() == 1 && m2.paintings[0].frame && m2.paintings[0].item.id == DIAMOND_SWORD &&
               m2.paintings[0].rotation == 3 && m2.paintings[0].dir == 2);
         uint32_t rng = 9;

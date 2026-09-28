@@ -2463,7 +2463,7 @@ int main(int argc, char** argv) {
         {
             int64_t openKey = INT64_MIN;
             if (g_in.screen == Screen::Container && gui.kind == GuiKind::Chest && gui.tile &&
-                world->getBlock(gui.tile->x, gui.tile->y, gui.tile->z) == CHEST)
+                (world->getBlock(gui.tile->x, gui.tile->y, gui.tile->z) == CHEST || world->getBlock(gui.tile->x, gui.tile->y, gui.tile->z) == ENDER_CHEST))
                 openKey = posKey(gui.tile->x, gui.tile->y, gui.tile->z);
             if (openKey == INT64_MIN) openKey = showcaseLidKey;
             if (openKey != INT64_MIN) chestLids[openKey];
@@ -3251,6 +3251,15 @@ int main(int argc, char** argv) {
             if (aimingGui) {
                 if (g_in.placeClick) {
                     if (target == CRAFTING_TABLE) openGui(GuiKind::Crafting, nullptr);
+                    else if (target == ENDER_CHEST) {
+                        // Эндер-сундук: личный инвентарь игрока (раньше открывалось окно печи и на месте появлялась «печь»)
+                        if (!world->chestBlocked(hit.x, hit.y, hit.z)) {
+                            player.enderChest.type = TileEntity::Chest;
+                            player.enderChest.x = hit.x; player.enderChest.y = hit.y; player.enderChest.z = hit.z; // для крышки
+                            openGui(GuiKind::Chest, &player.enderChest);
+                            gui.enderChest = true;
+                        }
+                    }
                     else if (target == ENCHANT_TABLE) {
                         // Книжные полки на расстоянии 2 (на уровне стола и выше), проём между ними пустой
                         int shelves = 0;
@@ -4492,6 +4501,7 @@ int main(int argc, char** argv) {
         w.i32(bed.x); w.i32(bed.y); w.i32(bed.z);
         for (auto& s : inv.slots) writeItem(w, s);
         for (auto& s : inv.armor) writeItem(w, s);
+        for (auto& s : player.enderChest.items) writeItem(w, s); // эндер-сундук (необязательный хвост)
         netConn.send(C_SAVE, w);
     };
     savePlayerFn = savePlayerBlob;
@@ -4513,6 +4523,11 @@ int main(int argc, char** argv) {
         for (auto& s : ni.slots) s = readItem(r);
         for (auto& s : ni.armor) s = readItem(r);
         if (!r.ok) return;
+        TileEntity ender;
+        if (r.more()) {
+            for (auto& s : ender.items) s = readItem(r);
+            if (!r.ok) ender = TileEntity{};
+        }
         if (dim != 0 && dim >= -1 && dim <= 1) { switchDimension(dim); pendingPortal = pendingEnd = pendingRespawn = false; }
         player.pos = player.prevPos = pos;
         player.yaw = yaw; player.pitch = pitch;
@@ -4521,6 +4536,7 @@ int main(int argc, char** argv) {
         player.xpLevel = xpl; player.xpProgress = xpp; player.xpTotal = xpt;
         player.mode = creative ? GameMode::Creative : GameMode::Survival;
         inv = ni;
+        player.enderChest = ender;
         if (world) { world->hasBedSpawn = hasBed; world->bedSpawn = bed; }
         loading = true;
         loadingStart = glfwGetTime();
@@ -4930,6 +4946,8 @@ int main(int argc, char** argv) {
                                          makeStack(SKULL_ITEM, 1, 2), makeStack(CHAIN_HELMET), makeStack(FLOWER_POT_ITEM),
                                          makeStack(ITEM_FRAME_ITEM), makeStack(PLANKS, 64, 1)};
             for (int i = 0; i < 9; ++i) inv.slots[i] = bar142[i];
+            world->setBlock(o.x, o.y + 2, o.z + 9, ENDER_CHEST, 5); // эндер-сундук у игрока (ПКМ — личный инвентарь)
+            player.enderChest.items[0] = makeStack(DIAMOND, 5);
         }
         g_in.selected = 2;
         // Сундуки: одиночный и двойной (крышка двойного открыта при MC_SHOW_CHEST)

@@ -270,7 +270,7 @@ inline bool isTargetable(uint8_t b) { return b != AIR && !isLiquid(b) && b != FI
 // Блок с интерфейсом (открывается правой кнопкой)
 inline bool hasGui(uint8_t b) {
     return b == CRAFTING_TABLE || b == FURNACE || b == FURNACE_LIT || b == CHEST || b == DISPENSER || b == ENCHANT_TABLE || b == BREWING_STAND ||
-           b == ENDER_CHEST || b == ANVIL;
+           b == ENDER_CHEST;
 }
 inline bool isPiston(uint8_t b) { return b == PISTON || b == STICKY_PISTON; }
 inline bool isRedstoneTorch(uint8_t b) { return b == REDSTONE_TORCH_ON || b == REDSTONE_TORCH_OFF; }
@@ -395,6 +395,7 @@ inline int lightEmission(uint8_t b) {
     case DRAGON_EGG: return 1;
     case BROWN_MUSHROOM: return 1;
     case BEACON: return 15;
+    case ENDER_CHEST: return 7;
     default: return 0;
     }
 }
