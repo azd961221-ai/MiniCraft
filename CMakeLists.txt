@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 
+# vcpkg: C:/vcpkg (где стоят glfw3, glad, glm), а если его нет — из переменной окружения VCPKG_ROOT
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "vcpkg toolchain")
+    if(EXISTS "C:/vcpkg/scripts/buildsystems/vcpkg.cmake" OR NOT DEFINED ENV{VCPKG_ROOT})
+        set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "vcpkg toolchain")
+    else()
+        set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "vcpkg toolchain")
+    endif()
 endif()
 
 project(MiniCraft C CXX)
@@ -49,8 +54,8 @@ add_executable(MiniCraft
 
 target_include_directories(MiniCraft PRIVATE third_party)
 target_link_libraries(MiniCraft PRIVATE glfw glad::glad glm::glm windowscodecs ole32 ws2_32 iphlpapi)
-# Ассеты (текстуры, звуки) берутся из src/, если рядом с exe нет папки assets/
-target_compile_definitions(MiniCraft PRIVATE MC_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src")
+# Ассеты (текстуры, звуки) берутся из assets/ в корне проекта, если рядом с exe нет своей папки assets/
+target_compile_definitions(MiniCraft PRIVATE MC_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 
 # Выделенный сервер для мультиплеера: build\Release\MiniCraftServer.exe (консоль, без графики)
 add_executable(MiniCraftServer
@@ -113,6 +118,11 @@ target_link_libraries(selftest PRIVATE glm::glm)
 if(MSVC)
     target_compile_options(selftest PRIVATE /W3 /utf-8)
 endif()
+
+# Оба теста разом: ctest --test-dir build -C Release
+enable_testing()
+add_test(NAME selftest COMMAND selftest)
+add_test(NAME worldtest COMMAND worldtest "${CMAKE_BINARY_DIR}/worldtest_tmp")
 
 if(MSVC)
     target_compile_options(MiniCraft PRIVATE /W3 /utf-8 /O2)

@@ -150,6 +150,25 @@ int main(int argc, char** argv) {
         CHECK(pigs == 1);
     }
 
+    // --- Оборванный entities.sav: берётся .bak, и прочитанное из битого файла не удваивает мобов
+    {
+        std::string dir = tmp + "broken_entities/";
+        std::filesystem::create_directories(std::filesystem::u8path(dir));
+        MobManager mm;
+        for (int i = 0; i < 10; ++i) mm.spawn(MobType::Cow, glm::vec3((float)i * 2.f, 70.f, 0.f), 0.f);
+        Player p;
+        p.pos = glm::vec3(0, 70, 0);
+        std::vector<ItemEntity> items;
+        CHECK(mm.save(dir + "entities.sav", p, &items)); // первое сохранение
+        CHECK(mm.save(dir + "entities.sav", p, &items)); // второе: прежнее стало .bak
+        std::filesystem::resize_file(std::filesystem::u8path(dir + "entities.sav"),
+                                     std::filesystem::file_size(std::filesystem::u8path(dir + "entities.sav")) / 2);
+        MobManager mm2;
+        std::vector<ItemEntity> back;
+        CHECK(mm2.load(dir + "entities.sav", p, &back));
+        CHECK(mm2.mobs.size() == 10);
+    }
+
     // --- Лава рядом с досками рано или поздно поджигает (случайные тики)
     {
         platform(w, 0, 20, 6, 26, Y);

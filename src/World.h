@@ -21,7 +21,7 @@ constexpr int CH = 128;  // высота мира, как в 1.0
 constexpr int SEA = 63;  // верхний блок воды (уровень моря 64, как в 1.0)
 
 inline int floorDiv(int a, int b) { return (a >= 0) ? a / b : -((-a + b - 1) / b); }
-inline int64_t chunkKey(int cx, int cz) { return ((int64_t)cx << 32) ^ (uint32_t)cz; }
+inline int64_t chunkKey(int cx, int cz) { return (int64_t)((uint64_t)(int64_t)cx << 32) ^ (uint32_t)cz; } // без сдвига отрицательного
 inline int64_t posKey(int x, int y, int z) {
     return ((int64_t)(x & 0x3FFFFFF) << 38) | ((int64_t)(y & 0xFFF) << 26) | (int64_t)(z & 0x3FFFFFF);
 }
@@ -162,6 +162,14 @@ inline void blockBounds(uint8_t b, uint8_t meta, int x, int z, glm::vec3& mn, gl
         if ((meta & 1) == 0) { mn.x = 0.375f; mx.x = 0.625f; }
         else { mn.z = 0.375f; mx.z = 0.625f; }
         break;
+    // 1.4.2: сундуки ниже и уже куба, наковальня — по повороту, горшок и голова — маленькие
+    case CHEST: case ENDER_CHEST: mn = {1 / 16.f, 0.f, 1 / 16.f}; mx = {15 / 16.f, 14 / 16.f, 15 / 16.f}; break;
+    case ANVIL:
+        if ((meta & 1) == 0) { mn.x = 0.125f; mx.x = 0.875f; }
+        else { mn.z = 0.125f; mx.z = 0.875f; }
+        break;
+    case FLOWER_POT: mn = {5 / 16.f, 0.f, 5 / 16.f}; mx = {11 / 16.f, 6 / 16.f, 11 / 16.f}; break;
+    case SKULL_BLOCK: mn = {0.25f, 0.f, 0.25f}; mx = {0.75f, 0.5f, 0.75f}; break;
     default: break;
     }
     if (hasPlantOffset(b)) {

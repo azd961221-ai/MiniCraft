@@ -20,7 +20,9 @@
 #include <thread>
 #include <vector>
 #define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #include "../src/Crafting.h"
 #include "../src/GameLogic.h"
@@ -112,7 +114,7 @@ Props loadProps(const std::string& path) {
 }
 
 // Дневной свет 0..1 (как яркость неба в 1.0) и дождь его приглушает
-float daylight(int64_t t, bool rain) {
+float skyBrightness(int64_t t, bool rain) {
     float f = (float)(t % 24000) / 24000.f - 0.25f;
     if (f < 0.f) f += 1.f;
     f += (1.f - (std::cos(f * 3.14159265f) + 1.f) / 2.f - f) / 3.f;
@@ -126,6 +128,7 @@ struct Client {
     uint32_t id = 0;
     std::string name;
     bool logged = false;
+    std::chrono::steady_clock::time_point connectedAt = std::chrono::steady_clock::now();
     PlayerNet st;
     Player proxy;           // «тень» игрока на сервере: по ней целятся мобы и считаются попадания
     int dim = 0;
@@ -157,6 +160,19 @@ struct Dim {
 };
 
 std::string dimPrefix(int d) { return d == -1 ? "nether_" : d == 1 ? "end_" : ""; }
+
+// Координаты из пакета: без NaN/бесконечностей и в пределах мира. Иначе приведение к int при поиске чанков —
+// неопределённое поведение, а сущность с NaN-позицией живёт вечно
+bool sanePos(const glm::vec3& p) {
+    return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z) &&
+           std::abs(p.x) < 3.0e7f && std::abs(p.z) < 3.0e7f && std::abs(p.y) < 1.0e5f;
+}
+// Направление: конечное и ненулевое (glm::normalize от нуля даёт NaN)
+bool saneDir(const glm::vec3& d, float maxLen = 1.0e3f) {
+    if (!std::isfinite(d.x) || !std::isfinite(d.y) || !std::isfinite(d.z)) return false;
+    float l = glm::length(d);
+    return l > 1e-6f && l < maxLen;
+}
 
 } // namespace
 
@@ -360,7 +376,8 @@ int main() {
         for (unsigned char ch : name) f += (std::isalnum(ch) || ch == '_' || ch == '-' || ch >= 0x80) ? (char)ch : '_';
         std::string up;
         for (char ch : f) up += (char)std::toupper((unsigned char)ch);
-        static const char* RESERVED[] = {"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "LPT1", "LPT2", "LPT3"};
+        static const char* RESERVED[] = {"CON",  "PRN",  "AUX",  "NUL",  "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
+                                         "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"};
         for (auto* res : RESERVED)
             if (up == res) f += "_";
         return worldDir + "players/" + f + ".dat";
@@ -615,8 +632,8 @@ int main() {
                 case C_LOGIN: {
                     uint16_t ver = r.u16();
                     std::string name;
-                    for (char ch : r.str())
-                        if ((unsigned char)ch >= 32 && ch != 127) name += ch; // без управляющих символов
+                    for (char ch : validUtf8(r.str()))
+                        if ((unsigned char)ch >= 32 && ch != 127) name += ch; // без управляющих символов и битого UTF-8
                     while (!name.empty() && name.back() == ' ') name.pop_back();
                     if (name.empty() || name.size() > 32) name = "Player";
                     int online = 0;
@@ -735,10 +752,16 @@ int main() {
                     break;
                 }
                 case C_PLAYER: {
-                    c.st = readPlayerNet(r);
-                    c.vehicle = r.u32();
-                    c.forward = r.f32();
-                    c.strafe = r.f32();
+                    PlayerNet st = readPlayerNet(r);
+                    uint32_t vehicle = r.u32();
+                    float forward = r.f32(), strafe = r.f32();
+                    if (!r.ok || !sanePos(glm::vec3(st.x, st.y, st.z)) || !std::isfinite(st.yaw) || !std::isfinite(st.pitch) ||
+                        !std::isfinite(forward) || !std::isfinite(strafe))
+                        break;
+                    c.st = st;
+                    c.vehicle = vehicle;
+                    c.forward = std::clamp(forward, -1.f, 1.f);
+                    c.strafe = std::clamp(strafe, -1.f, 1.f);
                     c.moved = true;
                     Player& px = c.proxy;
                     px.prevPos = px.pos;
@@ -826,6 +849,8 @@ int main() {
                     float damage = r.f32();
                     int punch = r.u8();
                     bool flame = r.u8() != 0, pickup = r.u8() != 0;
+                    if (!r.ok || !sanePos(from) || !saneDir(dir) || !std::isfinite(speed) || !std::isfinite(damage)) break;
+                    speed = std::clamp(speed, 0.f, 10.f);
                     Arrow& a = dmp->mobs.shootArrow(from, dir, speed, 1.f, true, crit, rng);
                     a.damage = damage; a.punch = punch; a.flame = flame; a.pickup = pickup; a.owner = c.id;
                     glm::vec3 sp = from;
@@ -836,6 +861,7 @@ int main() {
                     glm::vec3 from = readVec3(r);
                     glm::vec3 dir = readVec3(r);
                     uint16_t item = r.u16(), dmgv = r.u16();
+                    if (!r.ok || !sanePos(from) || !saneDir(dir)) break;
                     size_t before = dmp->mobs.throwables.size();
                     // Око Края летит к ближайшей крепости (сервер знает мир)
                     dmp->mobs.throwItem(from, dir, item, rng, dmgv);
@@ -871,6 +897,9 @@ int main() {
                     glm::vec3 eye = readVec3(r);
                     glm::vec3 look = readVec3(r);
                     ItemStack s = readItem(r);
+                    if (!r.ok || !sanePos(eye) || !std::isfinite(look.x) || !std::isfinite(look.y) || !std::isfinite(look.z) ||
+                        glm::length(look) > 10.f)
+                        break;
                     if (!s.empty()) throwFromPlayer(dmp->items, eye, look, s, rng);
                     break;
                 }
@@ -888,6 +917,7 @@ int main() {
                     v.kind = (VehicleKind)std::min<uint8_t>(r.u8(), 3);
                     v.pos = v.prev = readVec3(r);
                     v.yaw = v.prevYaw = r.f32();
+                    if (!r.ok || !sanePos(v.pos) || !std::isfinite(v.yaw)) break;
                     v.id = dmp->mobs.nextId++;
                     v.chest.type = TileEntity::Chest;
                     dmp->mobs.vehicles.push_back(v);
@@ -1088,6 +1118,18 @@ int main() {
                 }
             }
         }
+        // ---- Не вошедшие за 30 с и те, кто не забирает данные (очередь отправки растёт без предела), — отключаем
+        for (auto& cp : clients) {
+            Client& c = *cp;
+            if (!c.conn.alive) continue;
+            if (!c.logged && std::chrono::steady_clock::now() - c.connectedAt > std::chrono::seconds(30)) {
+                logf(c.conn.peer + " did not log in, disconnected");
+                c.conn.close();
+            } else if (c.conn.pendingOut() > (64u << 20)) {
+                logf((c.logged ? c.name : c.conn.peer) + " is not receiving data, disconnected");
+                c.conn.close();
+            }
+        }
         // ---- Отключившиеся
         for (auto it = clients.begin(); it != clients.end();) {
             Client& c = **it;
@@ -1153,7 +1195,7 @@ int main() {
             for (Client* c : here)
                 if (c->vehicle) dm.mobs.riders[c->vehicle] = {&c->proxy, c->forward, c->strafe};
             Player& p0 = ps.empty() ? dm.idle : *ps[0];
-            float sky = d == 0 ? daylight(worldTime, raining) : 0.f;
+            float sky = d == 0 ? skyBrightness(worldTime, raining) : 0.f;
             int skySub = (int)((1.f - (sky - 0.05f) / 0.95f) * 11.f + 0.5f);
             MobHooks hooks = makeHooks(dm);
             TickEvents ev;

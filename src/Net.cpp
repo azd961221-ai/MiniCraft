@@ -16,6 +16,19 @@ namespace net {
 namespace {
 const uint32_t MAX_PACKET = 8u << 20; // защита от мусора: пакет не больше 8 МБ
 
+// Список адаптеров: если буфера мало (много виртуальных адаптеров), Windows сообщает нужный размер — повторяем
+bool adapterAddresses(std::vector<uint8_t>& buf) {
+    ULONG size = 32 * 1024;
+    for (int attempt = 0; attempt < 4; ++attempt) {
+        buf.assign(size, 0);
+        ULONG r = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, nullptr,
+                                       (IP_ADAPTER_ADDRESSES*)buf.data(), &size);
+        if (r == NO_ERROR) return true;
+        if (r != ERROR_BUFFER_OVERFLOW) return false;
+    }
+    return false;
+}
+
 void nonBlocking(SOCKET s) {
     u_long on = 1;
     ioctlsocket(s, FIONBIO, &on);
@@ -172,11 +185,9 @@ void Listener::close() {
 
 std::vector<LocalAddr> localAddressList() {
     std::vector<LocalAddr> out;
-    ULONG size = 32 * 1024;
-    std::vector<uint8_t> buf(size);
+    std::vector<uint8_t> buf;
+    if (!adapterAddresses(buf)) return out;
     auto* aa = (IP_ADAPTER_ADDRESSES*)buf.data();
-    if (GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, nullptr, aa, &size) != NO_ERROR)
-        return out;
     auto narrow = [](const wchar_t* w) {
         std::string s;
         if (!w) return s;
@@ -211,11 +222,9 @@ std::vector<LocalAddr> localAddressList() {
 
 std::vector<std::string> localAddresses() {
     std::vector<std::string> out;
-    ULONG size = 16 * 1024;
-    std::vector<uint8_t> buf(size);
+    std::vector<uint8_t> buf;
+    if (!adapterAddresses(buf)) return out;
     auto* aa = (IP_ADAPTER_ADDRESSES*)buf.data();
-    if (GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, nullptr, aa, &size) != NO_ERROR)
-        return out;
     for (auto* a = aa; a; a = a->Next) {
         if (a->OperStatus != IfOperStatusUp || a->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
         for (auto* u = a->FirstUnicastAddress; u; u = u->Next) {

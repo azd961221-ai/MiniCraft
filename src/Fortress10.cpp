@@ -155,7 +155,7 @@ bool World::fortressCenter10(int rx, int rz, int& X, int& Z) const {
 
 const void* World::fortressLayout10(int X, int Z) const {
     static thread_local std::map<std::pair<uint32_t, int64_t>, FortressLayout> cache;
-    auto key = std::make_pair(seed_, ((int64_t)X << 32) ^ (uint32_t)Z);
+    auto key = std::make_pair(seed_, chunkKey(X, Z));
     auto it = cache.find(key);
     if (it == cache.end()) {
         if (cache.size() > 16) cache.clear();

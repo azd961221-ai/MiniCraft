@@ -14,13 +14,19 @@ namespace {
 
 const double PI_D = 3.14159265358979323846;
 
+// Арифметика long из Java: переполнение «по кругу». В C++ знаковое переполнение и сдвиг отрицательного влево —
+// неопределённое поведение (оптимизатор вправе всё сломать), поэтому считаем в uint64_t — биты те же
+inline int64_t wrapMul(int64_t a, int64_t b) { return (int64_t)((uint64_t)a * (uint64_t)b); }
+inline int64_t wrapAdd(int64_t a, int64_t b) { return (int64_t)((uint64_t)a + (uint64_t)b); }
+inline int64_t wrapShl(int64_t a, int n) { return (int64_t)((uint64_t)a << n); }
+
 // ---- ГСЧ как java.util.Random (48-битный линейный конгруэнтный)
 struct JRandom {
     int64_t s = 0;
     explicit JRandom(int64_t seed = 0) { setSeed(seed); }
     void setSeed(int64_t seed) { s = (seed ^ 0x5DEECE66DLL) & ((1LL << 48) - 1); }
     int next(int bits) {
-        s = (s * 0x5DEECE66DLL + 0xBLL) & ((1LL << 48) - 1);
+        s = (int64_t)(((uint64_t)s * 0x5DEECE66DULL + 0xBULL) & ((1ULL << 48) - 1));
         return (int)(s >> (48 - bits));
     }
     int nextInt(int n) {
@@ -33,9 +39,18 @@ struct JRandom {
         } while (bits - val + (n - 1) < 0);
         return val;
     }
-    int64_t nextLong() { return ((int64_t)next(32) << 32) + (int64_t)next(32); }
+    // Порядок вызовов как в Java: сначала старшая часть. В «next() + next()» порядок операндов в C++ не задан
+    int64_t nextLong() {
+        int64_t hi = next(32);
+        int64_t lo = next(32);
+        return wrapAdd(wrapShl(hi, 32), lo);
+    }
     float nextFloat() { return next(24) / (float)(1 << 24); }
-    double nextDouble() { return (((int64_t)next(26) << 27) + next(27)) * (1.0 / (double)(1LL << 53)); }
+    double nextDouble() {
+        int64_t hi = next(26);
+        int64_t lo = next(27);
+        return (double)((hi << 27) + lo) * (1.0 / (double)(1LL << 53));
+    }
 };
 
 // ---- Улучшенный шум Перлина в double со случайным сдвигом и перестановкой (одна октава)
@@ -97,28 +112,29 @@ constexpr int64_t LCG_A = 6364136223846793005LL, LCG_C = 1442695040888963407LL;
 struct Layer {
     int64_t baseSeed, worldSeed = 0, chunkSeed = 0;
     std::shared_ptr<Layer> parent;
+    // s *= s * 6364136223846793005 + 1442695040888963407 (GenLayer), с переполнением по кругу
+    static int64_t step(int64_t s) { return wrapMul(s, wrapAdd(wrapMul(s, LCG_A), LCG_C)); }
     explicit Layer(int64_t b) {
         baseSeed = b;
-        for (int i = 0; i < 3; ++i) { baseSeed *= baseSeed * LCG_A + LCG_C; baseSeed += b; }
+        for (int i = 0; i < 3; ++i) baseSeed = wrapAdd(step(baseSeed), b);
     }
     virtual ~Layer() = default;
     void initWorld(int64_t s) {
         worldSeed = s;
         if (parent) parent->initWorld(s);
-        for (int i = 0; i < 3; ++i) { worldSeed *= worldSeed * LCG_A + LCG_C; worldSeed += baseSeed; }
+        for (int i = 0; i < 3; ++i) worldSeed = wrapAdd(step(worldSeed), baseSeed);
     }
     void initChunk(int64_t x, int64_t z) {
         chunkSeed = worldSeed;
-        chunkSeed *= chunkSeed * LCG_A + LCG_C; chunkSeed += x;
-        chunkSeed *= chunkSeed * LCG_A + LCG_C; chunkSeed += z;
-        chunkSeed *= chunkSeed * LCG_A + LCG_C; chunkSeed += x;
-        chunkSeed *= chunkSeed * LCG_A + LCG_C; chunkSeed += z;
+        chunkSeed = wrapAdd(step(chunkSeed), x);
+        chunkSeed = wrapAdd(step(chunkSeed), z);
+        chunkSeed = wrapAdd(step(chunkSeed), x);
+        chunkSeed = wrapAdd(step(chunkSeed), z);
     }
     int nextInt(int n) {
         int i = (int)((chunkSeed >> 24) % n);
         if (i < 0) i += n;
-        chunkSeed *= chunkSeed * LCG_A + LCG_C;
-        chunkSeed += worldSeed;
+        chunkSeed = wrapAdd(step(chunkSeed), worldSeed);
         return i;
     }
     virtual std::vector<int> get(int x, int z, int w, int h) = 0;
@@ -173,7 +189,7 @@ struct LZoom : Layer {
         for (int j = 0; j < ph - 1; ++j) {
             int a = in[j * pw], c = in[(j + 1) * pw];
             for (int i = 0; i < pw - 1; ++i) {
-                initChunk((int64_t)(i + px) << 1, (int64_t)(j + pz) << 1);
+                initChunk((int64_t)(i + px) * 2, (int64_t)(j + pz) * 2);
                 int b = in[i + 1 + j * pw], d = in[i + 1 + (j + 1) * pw];
                 int idx = (j * 2) * tw + i * 2;
                 tmp[idx] = a;
@@ -366,13 +382,13 @@ struct LVoronoi : Layer {
         for (int j = 0; j < ph - 1; ++j) {
             int a = in[j * pw], c = in[(j + 1) * pw];
             for (int i = 0; i < pw - 1; ++i) {
-                initChunk((int64_t)(i + px) << 2, (int64_t)(j + pz) << 2);
+                initChunk((int64_t)(i + px) * 4, (int64_t)(j + pz) * 4);
                 double ax = jit(), az = jit();
-                initChunk((int64_t)(i + px + 1) << 2, (int64_t)(j + pz) << 2);
+                initChunk((int64_t)(i + px + 1) * 4, (int64_t)(j + pz) * 4);
                 double bx = jit() + 4.0, bz = jit();
-                initChunk((int64_t)(i + px) << 2, (int64_t)(j + pz + 1) << 2);
+                initChunk((int64_t)(i + px) * 4, (int64_t)(j + pz + 1) * 4);
                 double cx = jit(), cz = jit() + 4.0;
-                initChunk((int64_t)(i + px + 1) << 2, (int64_t)(j + pz + 1) << 2);
+                initChunk((int64_t)(i + px + 1) * 4, (int64_t)(j + pz + 1) * 4);
                 double dx = jit() + 4.0, dz = jit() + 4.0;
                 int b = in[i + 1 + j * pw], d = in[i + 1 + (j + 1) * pw];
                 for (int v = 0; v < 4; ++v) {
@@ -687,7 +703,7 @@ struct Gen10 {
         int64_t a = r.nextLong() / 2 * 2 + 1, b = r.nextLong() / 2 * 2 + 1;
         for (int ox = c.cx - 8; ox <= c.cx + 8; ++ox)
             for (int oz = c.cz - 8; oz <= c.cz + 8; ++oz) {
-                r.setSeed(((int64_t)ox * a + (int64_t)oz * b) ^ seed);
+                r.setSeed(wrapAdd(wrapMul(ox, a), wrapMul(oz, b)) ^ seed);
                 int n = r.nextInt(r.nextInt(r.nextInt(40) + 1) + 1);
                 if (r.nextInt(15) != 0) n = 0;
                 for (int i = 0; i < n; ++i) {
@@ -751,7 +767,7 @@ struct Gen10 {
         int64_t a = r.nextLong() / 2 * 2 + 1, b = r.nextLong() / 2 * 2 + 1;
         for (int ox = c.cx - 8; ox <= c.cx + 8; ++ox)
             for (int oz = c.cz - 8; oz <= c.cz + 8; ++oz) {
-                r.setSeed(((int64_t)ox * a + (int64_t)oz * b) ^ seed);
+                r.setSeed(wrapAdd(wrapMul(ox, a), wrapMul(oz, b)) ^ seed);
                 if (r.nextInt(50) != 0) continue;
                 double x = ox * 16 + r.nextInt(16), y = r.nextInt(r.nextInt(40) + 8) + 20, z = oz * 16 + r.nextInt(16);
                 float yaw = r.nextFloat() * (float)PI_D * 2.f;
@@ -906,7 +922,7 @@ void World::generateOverworld10(Chunk& c) {
     // Наполнение: озёра, руды, пятна у воды
     JRandom r((int64_t)(int32_t)seed_);
     int64_t ka = r.nextLong() / 2 * 2 + 1, kb = r.nextLong() / 2 * 2 + 1;
-    r.setSeed(((int64_t)c.cx * ka + (int64_t)c.cz * kb) ^ (int64_t)(int32_t)seed_);
+    r.setSeed(wrapAdd(wrapMul(c.cx, ka), wrapMul(c.cz, kb)) ^ (int64_t)(int32_t)seed_);
     if (r.nextInt(4) == 0) lake(c, r, r.nextInt(CH), WATER);
     if (r.nextInt(8) == 0) {
         int y = r.nextInt(r.nextInt(CH - 8) + 8);

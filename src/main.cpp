@@ -4,7 +4,7 @@
 //   WASD — ходьба, Space — прыжок/плыть, двойное W или Ctrl — бег, Shift — красться
 //   Мышь — обзор, ЛКМ (удерживать) — ломать, ПКМ — ставить/использовать/есть, СКМ — выбрать блок
 //   1-9 / колесо — слот, E — инвентарь, Q — выбросить (Ctrl+Q — стопку), G — режим (выживание/творческий),
-//   двойной Space в творческом — полёт, F3 — отладка, F6 — поставить моба (отладка), T — +6 часов, -/= — дальность, Esc — меню
+//   двойной Space в творческом — полёт, F3 — отладка, F6 — поставить моба (отладка), T — чат, F9 — +6 часов, -/= — дальность, Esc — меню
 //   Мир сохраняется в world.sav рядом с exe.
 
 #include <glad/glad.h>
@@ -249,8 +249,11 @@ static int fatal(const wchar_t* text) {
 }
 
 static std::string findAssetRoot() {
+    // assets/ в корне проекта — полный набор 1.4.2 (текстуры + sounds/); в src/1.4.2 звуков нет,
+    // поэтому сборка из build/Release раньше находила src/1.4.2 и играла без звука
     std::vector<std::string> candidates = {
         exeDirectory() + "assets/",
+        exeDirectory() + "../../assets/",
         exeDirectory() + "../../src/1.4.2/",
         exeDirectory() + "../../src/",
         "assets/",
@@ -956,9 +959,41 @@ int main(int argc, char** argv) {
     load("gui/creative_inv/list_items.png", creativeListImg);
     load("gui/creative_inv/search.png", creativeSearchImg);
     load("gui/creative_inv/survival_inv.png", creativeSurvivalImg);
-    load("textures/sun.png", sunImg);
-    load("textures/moon.png", moonImg);
+    // 1.4.2: солнце и фазы Луны лежат в terrain/ (moon_phases.png — 8 фаз сеткой 4x2); старые ассеты — в textures/
+    auto assetExists = [&](const char* rel) { return std::filesystem::exists(std::filesystem::u8path(assets + rel)); };
+    load(assetExists("terrain/sun.png") ? "terrain/sun.png" : "textures/sun.png", sunImg);
+    const bool moonPhases = assetExists("terrain/moon_phases.png");
+    load(moonPhases ? "terrain/moon_phases.png" : assetExists("terrain/moon.png") ? "terrain/moon.png" : "textures/moon.png", moonImg);
     load("environment/clouds.png", cloudsImg);
+    // В terrain.png 1.4.2 тайлов сундука нет (на (9,1) — блок изумруда, соседние клетки пустые), а иконка сундука
+    // в инвентаре, в руке и частицы берутся из атласа. Собираем верх, бок и перед из развёртки модели (item/chest.png,
+    // item/enderchest.png) в свободные клетки: сундук — (10,2), (10,1), (11,1); эндер-сундук — (10,3), (9,3), (11,11)
+    {
+        auto composeChestTiles = [&](const Image& src, int topT, int sideT, int frontT) {
+            if (src.width < 56 || src.height < 43 || terrainImg.width < 256) return;
+            auto put = [&](int t, auto&& pixel) {
+                for (int y = 0; y < 16; ++y)
+                    for (int x = 0; x < 16; ++x) {
+                        const uint8_t* s = pixel(x, y);
+                        uint8_t* d = terrainImg.at((t % 16) * 16 + x, (t / 16) * 16 + y);
+                        std::copy(s, s + 4, d);
+                    }
+            };
+            // Верх крышки 14x14 в (14,0) растягиваем на 16x16
+            put(topT, [&](int x, int y) { return src.at(14 + x * 14 / 16, y * 14 / 16); });
+            // Бок и перед: полоса крышки (5 строк, v=14) над стенкой основания (10 строк, v=33), 14x15 -> 16x16
+            auto sideAt = [&](int u0, int x, int y, bool knob) {
+                int sx = x * 14 / 16, sy = y * 15 / 16;
+                if (knob && sx >= 6 && sx <= 7 && sy >= 3 && sy <= 6) return src.at(1 + (sx - 6), 1 + (sy - 3)); // замок (2x4 в (1,1))
+                return sy < 5 ? src.at(u0 + sx, 14 + sy) : src.at(u0 + sx, 33 + (sy - 5));
+            };
+            put(sideT, [&](int x, int y) { return sideAt(28, x, y, false); });
+            put(frontT, [&](int x, int y) { return sideAt(14, x, y, true); });
+        };
+        Image chestSrc;
+        if (loadImage(assets + "item/chest.png", chestSrc)) composeChestTiles(chestSrc, T(10, 2), T(10, 1), T(11, 1));
+        if (loadImage(assets + "item/enderchest.png", chestSrc)) composeChestTiles(chestSrc, T(10, 3), T(9, 3), T(11, 11));
+    }
     Image terrainUiImg = terrainImg;
     tintTerrain(terrainImg, false);
     tintTerrain(terrainUiImg, true);
@@ -1088,11 +1123,12 @@ int main(int argc, char** argv) {
         if (loadImage(assets + "misc/particlefield.png", ti)) { fieldTex = makeTexture(ti); rep(fieldTex); }
     }
     // Сундуки: item/chest.png (64x64) и item/largechest.png (128x64)
-    GLuint chestTex = 0, largeChestTex = 0;
+    GLuint chestTex = 0, largeChestTex = 0, enderChestTex = 0;
     {
         Image ci;
         if (loadImage(assets + "item/chest.png", ci)) chestTex = makeTexture(ci);
         if (loadImage(assets + "item/largechest.png", ci)) largeChestTex = makeTexture(ci);
+        if (loadImage(assets + "item/enderchest.png", ci)) enderChestTex = makeTexture(ci);
     }
     // Текстура стрелы в раскладке arrows.png 1.0 (32x32): бок 16x5 в (0,0), торец 5x5 в (0,5).
     // Файла в ассетах нет — рисуем: оперение (W/F), древко (b), наконечник (D/L)
@@ -1136,6 +1172,9 @@ int main(int argc, char** argv) {
 
     // Мобы
     GLuint mobTex[(int)MobType::COUNT];
+    // Высота развёртки = ширина модели * пропорции файла: в 1.4.2 zombie.png и pigzombie.png стали 64x64 (было 64x32),
+    // и со старой высотой 32 на модель ложилась растянутая вдвое текстура
+    float mobTexAspect[(int)MobType::COUNT];
     {
         const char* names[(int)MobType::COUNT] = {
             "pig", "cow", "sheep", "chicken", "zombie", "skeleton", "spider", "creeper",
@@ -1147,6 +1186,8 @@ int main(int argc, char** argv) {
         for (int i = 0; i < (int)MobType::COUNT; ++i) {
             Image img;
             load((std::string("mob/") + names[i] + ".png").c_str(), img);
+            glm::vec2 ts = mobTexSize((MobType)i);
+            mobTexAspect[i] = img.width > 1 ? (float)img.height / (float)img.width : ts.y / ts.x;
             mobTex[i] = makeTexture(img);
         }
     }
@@ -1160,6 +1201,8 @@ int main(int argc, char** argv) {
     GLuint wolfCollarTex = loadTex("mob/wolf_collar.png");
     GLuint catRedTex = loadTex("mob/cat_red.png"), catSiameseTex = loadTex("mob/cat_siamese.png");
     GLuint witherInvulTex = loadTex("mob/wither_invul.png");
+    Image witherArmorImg;
+    GLuint witherArmorTex = loadImage(assets + "armor/witherarmor.png", witherArmorImg) ? makeTexture(witherArmorImg, true) : 0;
     GLuint ghastFireTex = loadTex("mob/ghast_fire.png"), enderEyesTex = loadTex("mob/enderman_eyes.png");
     GLuint saddleTex = loadTex("mob/saddle.png");
     Image powerImg;
@@ -1214,7 +1257,7 @@ int main(int argc, char** argv) {
     }
     auto armorMaterial = [](uint16_t id) -> int {
         if (id >= LEATHER_HELMET && id <= LEATHER_BOOTS) return 0;
-        if (id >= 302 && id <= 305) return 1; // кольчуга
+        if (id >= CHAIN_HELMET && id <= CHAIN_BOOTS) return 1; // кольчуга
         if (id >= IRON_HELMET && id <= IRON_BOOTS) return 2;
         if (id >= DIAMOND_HELMET && id <= DIAMOND_BOOTS) return 3;
         if (id >= GOLD_HELMET && id <= GOLD_BOOTS) return 4;
@@ -3475,6 +3518,17 @@ int main(int argc, char** argv) {
                 if (block == LEAVES) meta = (uint8_t)((held.damage & 3) | LEAVES_PLAYER);
                 if (block == TALL_GRASS) meta = 1;
                 if (block == WOOL || block == SLAB || block == STONE_BRICK || block == MONSTER_EGG || block == SKULL_BLOCK) meta = (uint8_t)held.damage;
+                if (block == PLANKS || block == SANDSTONE) meta = (uint8_t)(held.damage & 3);
+                if (block == ANVIL) {
+                    // Длинной стороной поперёк взгляда (BlockAnvil.onBlockPlacedBy); биты 2-3 — износ
+                    glm::vec3 lk0 = player.look();
+                    meta = (uint8_t)((std::abs(lk0.x) > std::abs(lk0.z) ? 0 : 1) | ((held.damage & 3) << 2));
+                }
+                if (block == SKULL_BLOCK) {
+                    int rot = (int)std::floor((player.yaw + 180.f) / 22.5f + 0.5f) & 15; // лицом к игроку
+                    meta = (uint8_t)((held.damage & 7) | (rot << 4));
+                }
+                if (block == COBBLE_WALL) meta = (uint8_t)(held.damage & 1);
                 glm::vec3 lk = player.look();
                 uint8_t facing = std::abs(lk.x) > std::abs(lk.z) ? (lk.x > 0 ? 0 : 2) : (lk.z > 0 ? 1 : 3); // +X, +Z, -X, -Z
                 if (isStairs(block)) meta = std::abs(lk.x) > std::abs(lk.z) ? (lk.x > 0 ? 0 : 1) : (lk.z > 0 ? 2 : 3);
@@ -3537,7 +3591,7 @@ int main(int argc, char** argv) {
                     }
                 }
                 if (block == FURNACE || block == CHEST || block == FURNACE_LIT || block == PUMPKIN || block == JACK_O_LANTERN ||
-                    block == DISPENSER) {
+                    block == DISPENSER || block == ENDER_CHEST) {
                     // «Лицом» к игроку
                     glm::vec3 l = player.look();
                     if (std::abs(l.x) > std::abs(l.z)) meta = l.x > 0 ? 4 : 5;
@@ -4733,6 +4787,28 @@ int main(int argc, char** argv) {
             mobMgr.spawn(MobType::Ghast, glm::vec3(o.x + 8.f, (float)o.y + 12.f, o.z + 40.f), 270.f);
         }
         world->signs[posKey(o.x + 12, o.y, o.z + 19)] = {"MiniCraft", "Minecraft 1.0", "port", ":)"};
+        if (std::getenv("MC_SHOW_142")) {
+            // Витрина 1.4.2 перед игроком: блоки и мобы с новыми текстурами (проверка перехода на ассеты 1.4.2)
+            for (int x = 0; x < 16; ++x)
+                for (int z = 0; z < 17; ++z)
+                    for (int y = 0; y < 4; ++y) S(x, y, z, AIR);
+            S(3, 0, 2, ANVIL, 0); S(3, 0, 4, ANVIL, 1 | 4); S(3, 0, 6, BEACON); S(3, 0, 8, FLOWER_POT);
+            S(3, 0, 10, ENDER_CHEST, 5); S(3, 0, 12, CHEST, 5); S(3, 0, 14, EMERALD_ORE);
+            for (int k = 0; k < 5; ++k) S(5, 0, 2 + k * 2, SKULL_BLOCK, (uint8_t)(k | (12 << 4)));
+            for (int d = 0; d < 4; ++d) { S(7, 0, 2 + d * 2, PLANKS, (uint8_t)d); S(7, 1, 2 + d * 2, LOG, (uint8_t)d); S(7, 2, 2 + d * 2, LEAVES, (uint8_t)(d | LEAVES_PLAYER)); }
+            for (int d = 0; d < 3; ++d) S(7, 0, 10 + d * 2, SANDSTONE, (uint8_t)d);
+            S(9, 0, 2, STONE_BRICK, 3); S(9, 0, 4, COBBLE_WALL, 1); S(9, 0, 6, FARMLAND, 7); S(9, 1, 6, CARROTS, 7);
+            S(9, 0, 8, FARMLAND, 7); S(9, 1, 8, POTATOES, 3); S(9, 0, 10, COMMAND_BLOCK); S(9, 0, 12, EMERALD_BLOCK);
+            const MobType row142[] = {MobType::Zombie, MobType::PigZombie, MobType::ZombieVillager, MobType::WitherSkeleton, MobType::Witch,
+                                      MobType::Skeleton};
+            // Загон под навесом (иначе нежить горит на солнце и за огнём текстуры не видно)
+            for (int z = 1; z <= 15; ++z) {
+                S(10, 0, z, FENCE); S(13, 0, z, FENCE);
+                for (int x = 10; x <= 13; ++x) S(x, 3, z, STONE);
+            }
+            for (int x = 10; x <= 13; ++x) { S(x, 0, 1, FENCE); S(x, 0, 15, FENCE); }
+            for (int i = 0; i < 6; ++i) mobMgr.spawn(row142[i], glm::vec3(o.x + 11.5f, (float)o.y, o.z + 3.5f + i * 2.f), 180.f);
+        }
         for (int y = 0; y < 3; ++y) S(-2, y, 8, STONE);
         S(0, 1, 8, OBSIDIAN); S(0, 2, 8, ENCHANT_TABLE); // стол с книгой рядом с игроком
         if (std::getenv("MC_SHOW_CART")) {
@@ -4775,6 +4851,12 @@ int main(int argc, char** argv) {
                                   makeStack(FENCE_GATE, 64), makeStack(FENCE, 64), makeStack(GLASS_PANE, 64), makeStack(TNT, 64),
                                   makeStack(WOOD_DOOR_ITEM)};
         for (int i = 0; i < 9; ++i) inv.slots[i] = bar[i];
+        if (std::getenv("MC_SHOW_142")) {
+            const ItemStack bar142[9] = {makeStack(CHEST), makeStack(ENDER_CHEST), makeStack(ANVIL), makeStack(BEACON),
+                                         makeStack(SKULL_ITEM, 1, 2), makeStack(CHAIN_HELMET), makeStack(FLOWER_POT_ITEM),
+                                         makeStack(ITEM_FRAME_ITEM), makeStack(PLANKS, 64, 1)};
+            for (int i = 0; i < 9; ++i) inv.slots[i] = bar142[i];
+        }
         g_in.selected = 2;
         // Сундуки: одиночный и двойной (крышка двойного открыта при MC_SHOW_CHEST)
         S(10, 0, 7, CHEST, 4); S(10, 0, 15, CHEST, 2); S(11, 0, 15, CHEST, 2); S(11, 0, 12, CHEST, 5); S(11, 0, 13, CHEST, 5);
@@ -5129,7 +5211,19 @@ int main(int argc, char** argv) {
             };
             glUniform4f(glGetUniformLocation(spriteProg, "uColor"), 1, 1, 1, 1.f - rainNow);
             body(100.f, 30.f, sunTex);
-            body(-100.f, 20.f, moonTex);
+            if (moonPhases) {
+                // Фаза Луны меняется каждые сутки (World.getMoonPhase 1.4.2): клетка phase%4, phase/4 в сетке 4x2.
+                // Углы и UV — как в RenderGlobal 1.4.2; наша сфера повёрнута на -90° вокруг Y (x = -z_mc, z = x_mc)
+                int phase = (int)((worldTime / 24000) % 8);
+                float u0 = (phase % 4) / 4.f, v0 = (phase / 4) / 2.f, u1 = u0 + 0.25f, v1 = v0 + 0.5f;
+                const float s = 20.f, y = -100.f;
+                std::vector<float> v = {-s, y, -s, u1, v1, s, y, -s, u1, v0, s, y, s, u0, v0,
+                                        -s, y, -s, u1, v1, s, y, s, u0, v0, -s, y, s, u0, v1};
+                glBindTexture(GL_TEXTURE_2D, moonTex);
+                drawSprite(v);
+            } else {
+                body(-100.f, 20.f, moonTex);
+            }
             glDepthMask(GL_TRUE);
         }
 
@@ -5474,6 +5568,7 @@ int main(int argc, char** argv) {
                 em = glm::translate(em, glm::vec3(0.f, -24.f, 0.f));
             }
             glm::vec2 ts = mobTexSize(m.type);
+            ts.y = ts.x * mobTexAspect[(int)m.type];
             if (m.fireTicks > 0 && !isFireImmune(m.type)) {
                 // Слои пламени, повёрнутые к камере: каждый выше на 0.45, уже на 10% и чуть ближе к зрителю
                 float sz = (m.type == MobType::Slime || m.type == MobType::MagmaCube) ? (float)m.size : m.scale;
@@ -5512,6 +5607,8 @@ int main(int argc, char** argv) {
             if (m.type == MobType::Wolf) mt = m.tamed ? wolfTameTex : m.angry ? wolfAngryTex : mt;
             if (m.type == MobType::Ghast && m.attackCounter > 10) mt = ghastFireTex;
             if (m.type == MobType::Villager) mt = villagerTex[m.color % 5]; // профессия
+            if (m.type == MobType::Wither && m.invulnerable > 0 && witherInvulTex && (m.invulnerable > 80 || (m.invulnerable / 5) % 2 != 1))
+                mt = witherInvulTex;
             if (isFireImmune(m.type) && m.type != MobType::PigZombie) { sky = 1.f; bl = 1.f; }
             if (m.type == MobType::EnderDragon && m.dying() && shuffleTex) {
                 // RenderDragon 1.0: сначала глубина только там, где альфа shuffle.png больше доли смерти,
@@ -5643,7 +5740,7 @@ int main(int argc, char** argv) {
                 drawDynamic(cv);
                 glUniform3fv(tintLoc, 1, glm::value_ptr(tint));
             }
-            if (m.type == MobType::Wither && (m.invulnerable > 0 || m.health <= 150) && witherInvulTex) {
+            if (m.type == MobType::Wither && m.invulnerable <= 0 && m.health <= 150 && witherArmorTex) {
                 std::vector<Vertex> pv;
                 auto pm = buildMobModel(m.type, pose, 0);
                 for (auto& pp : pm)
@@ -5654,7 +5751,7 @@ int main(int argc, char** argv) {
                 glEnable(GL_BLEND);
                 glBlendFunc(GL_ONE, GL_ONE);
                 glUniform3f(tintLoc, 0.5f, 0.5f, 0.5f);
-                glBindTexture(GL_TEXTURE_2D, witherInvulTex);
+                glBindTexture(GL_TEXTURE_2D, witherArmorTex);
                 drawDynamic(pv);
                 glDisable(GL_BLEND);
                 glUniform3fv(tintLoc, 1, glm::value_ptr(tint));
@@ -5865,6 +5962,7 @@ int main(int argc, char** argv) {
             std::vector<Vertex> mv;
             glm::ivec3 cell(sp.x, sp.y, sp.z);
             glm::vec2 ts = mobTexSize(sp.type);
+            ts.y = ts.x * mobTexAspect[(int)sp.type];
             emitModel(mv, buildMobModel(sp.type, pose, 0), em, world->getSkyLight(cell.x, cell.y + 1, cell.z) / 15.f,
                       world->getBlockLight(cell.x, cell.y + 1, cell.z) / 15.f, ts.x, ts.y);
             glBindTexture(GL_TEXTURE_2D, mobTex[(int)sp.type]);
@@ -6171,17 +6269,35 @@ int main(int argc, char** argv) {
             glBindTexture(GL_TEXTURE_2D, terrainTex);
         }
 
-        // Сундуки (TileEntityChestRenderer 1.0): у двойного рисует половина с меньшей координатой
+        // Сундуки (TileEntityChestRenderer 1.0): у двойного рисует половина с меньшей координатой.
+        // Там же эндер-сундуки (item/enderchest.png) и головы мобов (TileEntitySkullRenderer 1.4.2)
         if (chestTex && largeChestTex) {
-            std::vector<Vertex> sv, lv;
+            std::vector<Vertex> sv, lv, ev;
+            std::vector<Vertex> skullV[5];
             for (auto& [ck, ch] : world->chunks) {
                 if (ch->chests.empty()) continue;
                 float cdx = ch->cx * CW + 8.f - eye.x, cdz = ch->cz * CW + 8.f - eye.z;
                 if (cdx * cdx + cdz * cdz > 80.f * 80.f) continue;
                 for (const glm::ivec3& p : ch->chests) {
-                    if (world->getBlock(p.x, p.y, p.z) != CHEST) continue;
-                    if (world->getBlock(p.x - 1, p.y, p.z) == CHEST || world->getBlock(p.x, p.y, p.z - 1) == CHEST) continue;
-                    bool xp = world->getBlock(p.x + 1, p.y, p.z) == CHEST, zp = world->getBlock(p.x, p.y, p.z + 1) == CHEST;
+                    uint8_t cb = world->getBlock(p.x, p.y, p.z);
+                    if (cb == SKULL_BLOCK) {
+                        // Голова 8x8x8 с развёрткой (0,0) текстуры моба; биты 4-7 меты — поворот к игроку (по 22.5°)
+                        int kind = std::min(4, world->getMeta(p.x, p.y, p.z) & 7);
+                        float yawDeg = (world->getMeta(p.x, p.y, p.z) >> 4) * 22.5f;
+                        ModelPart head;
+                        head.boxes.push_back({-4.f, -8.f, -4.f, 8, 8, 8, 0, 0});
+                        glm::mat4 hm = entityMatrix(glm::vec3(p.x + 0.5f, p.y - 1.5f, p.z + 0.5f), yawDeg);
+                        static const MobType SKULL_MOB[5] = {MobType::Skeleton, MobType::WitherSkeleton, MobType::Zombie, MobType::Zombie,
+                                                             MobType::Creeper};
+                        float texH = kind == 3 ? 32.f : 64.f * mobTexAspect[(int)SKULL_MOB[kind]];
+                        emitModel(skullV[kind], {head}, hm, world->getSkyLight(p.x, p.y, p.z) / 15.f, world->getBlockLight(p.x, p.y, p.z) / 15.f,
+                                  64.f, texH);
+                        continue;
+                    }
+                    bool ender = cb == ENDER_CHEST;
+                    if (cb != CHEST && !ender) continue;
+                    if (!ender && (world->getBlock(p.x - 1, p.y, p.z) == CHEST || world->getBlock(p.x, p.y, p.z - 1) == CHEST)) continue;
+                    bool xp = !ender && world->getBlock(p.x + 1, p.y, p.z) == CHEST, zp = !ender && world->getBlock(p.x, p.y, p.z + 1) == CHEST;
                     int meta = world->getMeta(p.x, p.y, p.z);
                     float ang = meta == 2 ? 180.f : meta == 4 ? 90.f : meta == 5 ? -90.f : 0.f;
                     glm::mat4 m = glm::translate(glm::mat4(1.f), glm::vec3(p) + glm::vec3(0, 1, 1));
@@ -6199,11 +6315,16 @@ int main(int argc, char** argv) {
                     lid = 1.f - lid * lid * lid;
                     float sky = world->getSkyLight(p.x, p.y, p.z) / 15.f, bl = world->getBlockLight(p.x, p.y, p.z) / 15.f;
                     bool large = xp || zp;
-                    emitModel(large ? lv : sv, buildChestModel(large, lid), m, sky, bl, large ? 128.f : 64.f, 64.f);
+                    emitModel(ender ? ev : large ? lv : sv, buildChestModel(large, lid), m, sky, bl, large ? 128.f : 64.f, 64.f);
                 }
             }
             if (!sv.empty()) { glBindTexture(GL_TEXTURE_2D, chestTex); drawDynamic(sv); }
             if (!lv.empty()) { glBindTexture(GL_TEXTURE_2D, largeChestTex); drawDynamic(lv); }
+            if (!ev.empty() && enderChestTex) { glBindTexture(GL_TEXTURE_2D, enderChestTex); drawDynamic(ev); }
+            const GLuint skullTex[5] = {mobTex[(int)MobType::Skeleton], mobTex[(int)MobType::WitherSkeleton], mobTex[(int)MobType::Zombie],
+                                        charTex, mobTex[(int)MobType::Creeper]};
+            for (int k = 0; k < 5; ++k)
+                if (!skullV[k].empty()) { glBindTexture(GL_TEXTURE_2D, skullTex[k]); drawDynamic(skullV[k]); }
             glBindTexture(GL_TEXTURE_2D, terrainTex);
         }
 

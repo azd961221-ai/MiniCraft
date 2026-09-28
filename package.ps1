@@ -6,7 +6,7 @@
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $rel = Join-Path $root 'build\Release'
-$src = Join-Path $root 'src'
+$assetsSrc = Join-Path $root 'assets'
 $out = Join-Path $root 'dist\MiniCraft'
 $stageRoot = Join-Path $root 'dist\_stage'
 $stage = Join-Path $stageRoot 'MiniCraft'
@@ -30,17 +30,12 @@ foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') { Cop
 # Брандмауэр и инструкция по сетевой игре
 Copy-Item (Join-Path $root 'dist-files\*') $stage
 
-# Ресурсы, которые читает игра (без .import-файлов)
+# Ресурсы, которые читает игра: папка assets\ в корне проекта (текстуры 1.4.2 + sounds\), без .import-файлов.
+# Раньше копировались src\terrain.png, src\gui и т.д. — после переезда ассетов в src\1.4.2 и assets\ этих путей нет
 $assets = Join-Path $stage 'assets'
-New-Item -ItemType Directory -Force $assets | Out-Null
-Copy-Item (Join-Path $src 'terrain.png'), (Join-Path $src 'particles.png') $assets
-foreach ($dir in 'gui', 'mob', 'sounds', 'bg', 'environment', 'textures', 'item', 'art', 'misc', 'armor', 'terrain', 'achievement') {
-    $from = Join-Path $src $dir
-    if (Test-Path $from) {
-        robocopy $from (Join-Path $assets $dir) /E /XF *.import /NFL /NDL /NJH /NJS /NP | Out-Null
-        if ($LASTEXITCODE -ge 8) { throw "Failed to copy $dir" }
-    }
-}
+if (-not (Test-Path (Join-Path $assetsSrc 'terrain.png'))) { throw "Assets not found: $assetsSrc\terrain.png" }
+robocopy $assetsSrc $assets /E /XF *.import /NFL /NDL /NJH /NJS /NP | Out-Null
+if ($LASTEXITCODE -ge 8) { throw 'Failed to copy assets' }
 
 $zip = Join-Path $root 'dist\MiniCraft.zip'
 if (Test-Path $zip) { Remove-Item -Force $zip }

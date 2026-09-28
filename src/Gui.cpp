@@ -139,7 +139,7 @@ void ContainerScreen::initTabs() {
     for (int d = 0; d < 3; ++d) add(0, SANDSTONE, d);
     for (int d = 0; d < 4; ++d) add(0, PLANKS, d);
     for (int d = 0; d < 4; ++d) add(0, LOG, d);
-    for (int d = 0; d < 7; ++d) add(0, SLAB, d);
+    for (int d = 0; d < 6; ++d) add(0, SLAB, d);
     add(0, WOOD_STAIRS);
     add(0, COBBLE_STAIRS);
     add(0, BRICK_STAIRS);
@@ -293,7 +293,7 @@ void ContainerScreen::initTabs() {
     add(8, WOOD_SWORD);
     static const uint16_t ARMORS[] = {
         LEATHER_HELMET, LEATHER_CHESTPLATE, LEATHER_LEGGINGS, LEATHER_BOOTS,
-        302, 303, 304, 305,
+        CHAIN_HELMET, CHAIN_CHESTPLATE, CHAIN_LEGGINGS, CHAIN_BOOTS,
         IRON_HELMET, IRON_CHESTPLATE, IRON_LEGGINGS, IRON_BOOTS,
         DIAMOND_HELMET, DIAMOND_CHESTPLATE, DIAMOND_LEGGINGS, DIAMOND_BOOTS,
         GOLD_HELMET, GOLD_CHESTPLATE, GOLD_LEGGINGS, GOLD_BOOTS

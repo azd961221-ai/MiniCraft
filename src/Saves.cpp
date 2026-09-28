@@ -11,8 +11,12 @@
 namespace fs = std::filesystem;
 
 FILE* openFileUtf8(const std::string& path, const char* mode) {
+#ifdef _WIN32
     std::wstring wp = fs::u8path(path).wstring(), wm(mode, mode + std::strlen(mode));
     return _wfopen(wp.c_str(), wm.c_str());
+#else
+    return std::fopen(path.c_str(), mode);  // вне Windows пути и так в UTF-8
+#endif
 }
 
 bool commitFile(const std::string& tmpPath, const std::string& path) {
@@ -30,6 +34,30 @@ bool commitFile(const std::string& tmpPath, const std::string& path) {
 bool fileExistsUtf8(const std::string& path) {
     std::error_code ec;
     return fs::exists(fs::u8path(path), ec);
+}
+
+std::string validUtf8(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size();) {
+        unsigned char c = (unsigned char)s[i];
+        size_t len = c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2 : (c >> 4) == 0xE ? 3 : (c >> 3) == 0x1E ? 4 : 0;
+        bool ok = len > 0 && i + len <= s.size();
+        uint32_t cp = len == 1 ? c : len == 2 ? (c & 0x1F) : len == 3 ? (c & 0x0F) : (c & 0x07);
+        for (size_t k = 1; ok && k < len; ++k) {
+            unsigned char cc = (unsigned char)s[i + k];
+            ok = (cc & 0xC0) == 0x80;
+            cp = (cp << 6) | (cc & 0x3F);
+        }
+        // Без «длинных» записей, суррогатов и кодов выше U+10FFFF
+        if (ok && len > 1) {
+            static const uint32_t MIN_CP[5] = {0, 0, 0x80, 0x800, 0x10000};
+            ok = cp >= MIN_CP[len] && cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF);
+        }
+        if (ok) { out.append(s, i, len); i += len; }
+        else ++i; // битый байт пропускаем
+    }
+    return out;
 }
 
 int64_t nowSeconds() {

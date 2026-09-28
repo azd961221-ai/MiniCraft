@@ -1,4 +1,5 @@
 #include "Item.h"
+#include <algorithm>
 #include <string>
 
 namespace {
@@ -86,7 +87,9 @@ struct Table {
         tool(GOLD_HOE, "Golden Hoe", 4, 8, H, GOLD_T);
 
         const int leather[4] = {1, 3, 2, 1}, gold[4] = {2, 5, 3, 1}, iron[4] = {2, 6, 5, 2}, diamond[4] = {3, 8, 6, 3};
+        const int chain[4] = {2, 5, 4, 1};
         armorSet(LEATHER_HELMET, "Leather", 0, 5, leather);
+        armorSet(CHAIN_HELMET, "Chain", 1, 15, chain);
         armorSet(IRON_HELMET, "Iron", 2, 15, iron);
         armorSet(DIAMOND_HELMET, "Diamond", 3, 33, diamond);
         armorSet(GOLD_HELMET, "Golden", 4, 7, gold);
@@ -196,24 +199,24 @@ struct Table {
         food(RAW_FISH, "Raw Fish", 9, 5, 2, 0.3f);
         food(COOKED_FISH, "Cooked Fish", 10, 5, 5, 0.6f);
 
-        // 1.4.2 Items
+        // 1.4.2 Items (иконки — по items.png 1.4.2; (14,2) там — огненный шар, (10,13) пусто)
         item(EMERALD, "Emerald", 10, 11);
-        item(ITEM_FRAME_ITEM, "Item Frame", 14, 2);
-        item(FLOWER_POT_ITEM, "Flower Pot", 10, 13);
+        item(ITEM_FRAME_ITEM, "Item Frame", 14, 12);
+        item(FLOWER_POT_ITEM, "Flower Pot", 13, 11);
         defs[FLOWER_POT_ITEM].places = FLOWER_POT;
-        item(CARROT_ON_A_STICK, "Carrot on a Stick", 6, 5, 1);
+        item(CARROT_ON_A_STICK, "Carrot on a Stick", 6, 6, 1);
         defs[CARROT_ON_A_STICK].maxDamage = 25;
         item(NETHER_STAR, "Nether Star", 9, 11);
-        item(SKULL_ITEM, "Skeleton Skull", 0, 9);
+        item(SKULL_ITEM, "Skeleton Skull", 0, 14); // черепа — строка 14: скелет, иссушитель, зомби, игрок, крипер
         defs[SKULL_ITEM].places = SKULL_BLOCK;
 
         food(CARROT, "Carrot", 8, 7, 3, 0.6f);
         defs[CARROT].places = CARROTS;
         food(POTATO, "Potato", 7, 7, 1, 0.3f);
         defs[POTATO].places = POTATOES;
-        food(BAKED_POTATO, "Baked Potato", 7, 8, 5, 0.6f);
-        food(POISONOUS_POTATO, "Poisonous Potato", 8, 8, 2, 0.3f);
-        food(GOLDEN_CARROT, "Golden Carrot", 9, 7, 6, 1.2f);
+        food(BAKED_POTATO, "Baked Potato", 6, 7, 5, 0.6f);
+        food(POISONOUS_POTATO, "Poisonous Potato", 6, 8, 2, 0.3f);
+        food(GOLDEN_CARROT, "Golden Carrot", 6, 9, 6, 1.2f);
         food(PUMPKIN_PIE, "Pumpkin Pie", 8, 9, 8, 0.8f);
     }
 };
@@ -245,9 +248,30 @@ const char* itemName(const ItemStack& s) {
         return N[s.damage & 15];
     }
     if (s.id == STONE_BRICK) {
-        static const char* N[3] = {"Stone Bricks", "Mossy Stone Bricks", "Cracked Stone Bricks"};
-        return N[s.damage % 3];
+        static const char* N[4] = {"Stone Bricks", "Mossy Stone Bricks", "Cracked Stone Bricks", "Chiseled Stone Bricks"};
+        return N[s.damage & 3];
     }
+    if (s.id == PLANKS) {
+        static const char* N[4] = {"Oak Wood Planks", "Spruce Wood Planks", "Birch Wood Planks", "Jungle Wood Planks"};
+        return N[s.damage & 3];
+    }
+    if (s.id == LOG) {
+        static const char* N[4] = {"Oak Wood", "Spruce Wood", "Birch Wood", "Jungle Wood"};
+        return N[s.damage & 3];
+    }
+    if (s.id == SAPLING) {
+        static const char* N[4] = {"Oak Sapling", "Spruce Sapling", "Birch Sapling", "Jungle Sapling"};
+        return N[s.damage & 3];
+    }
+    if (s.id == LEAVES) {
+        static const char* N[4] = {"Oak Leaves", "Spruce Leaves", "Birch Leaves", "Jungle Leaves"};
+        return N[s.damage & 3];
+    }
+    if (s.id == SANDSTONE) {
+        static const char* N[3] = {"Sandstone", "Chiseled Sandstone", "Smooth Sandstone"};
+        return N[std::min(2, s.damage & 3)];
+    }
+    if (s.id == COBBLE_WALL) return (s.damage & 1) ? "Mossy Cobblestone Wall" : "Cobblestone Wall";
     if (s.id == TALL_GRASS) {
         static const char* N[3] = {"Shrub", "Grass", "Fern"};
         return N[s.damage % 3];

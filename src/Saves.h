@@ -37,6 +37,8 @@ FILE* openFileUtf8(const std::string& path, const char* mode);
 // Если запись оборвётся, останется либо старый файл, либо его копия .bak
 bool commitFile(const std::string& tmpPath, const std::string& path);
 bool fileExistsUtf8(const std::string& path);
+// Строка без битых последовательностей UTF-8 (fs::u8path в MSVC бросает исключение на неверном UTF-8)
+std::string validUtf8(const std::string& s);
 
 // Сид из строки: число как есть, иначе хэш строки (как String.hashCode в Java)
 uint32_t seedFromText(const std::string& text, uint32_t fallback);

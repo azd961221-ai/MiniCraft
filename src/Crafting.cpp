@@ -55,7 +55,7 @@ struct Book {
 
     Book() {
         using S = std::vector<std::string>;
-        shaped(makeStack(PLANKS, 4), S{"#"}, {{'#', LOG}});
+        for (uint16_t d = 0; d < 4; ++d) shapedI(makeStack(PLANKS, 4, d), S{"#"}, {{'#', Ingredient(LOG, d)}}); // доски своей породы
         shaped(makeStack(STICK, 4), S{"#", "#"}, {{'#', PLANKS}});
         shaped(makeStack(TORCH, 4), S{"X", "#"}, {{'X', COAL}, {'#', STICK}});
         shaped(makeStack(CRAFTING_TABLE), S{"##", "##"}, {{'#', PLANKS}});
@@ -105,6 +105,8 @@ struct Book {
         shaped(makeStack(CLAY), S{"##", "##"}, {{'#', CLAY_BALL}});
         shaped(makeStack(BRICK), S{"##", "##"}, {{'#', BRICK_ITEM}});
         shaped(makeStack(SANDSTONE), S{"##", "##"}, {{'#', SAND}});
+        shapedI(makeStack(SANDSTONE, 4, 2), S{"##", "##"}, {{'#', Ingredient(SANDSTONE, 0)}});  // гладкий (1.4.2)
+        shapedI(makeStack(SANDSTONE, 1, 1), S{"#", "#"}, {{'#', Ingredient(SLAB, 1)}});         // резной из двух плит песчаника
         shaped(makeStack(STONE_BRICK, 4), S{"##", "##"}, {{'#', STONE}});
         shaped(makeStack(WOOL), S{"##", "##"}, {{'#', STRING}});
         shaped(makeStack(BOOKSHELF), S{"###", "XXX", "###"}, {{'#', PLANKS}, {'X', BOOK}});
@@ -325,6 +327,8 @@ std::vector<ItemStack> blockDrops(uint8_t block, uint8_t meta, uint32_t& rng) {
     case REEDS: return {makeStack(REEDS_ITEM)};
     case COBWEB: return {makeStack(STRING)};
     case LOG: return {makeStack(LOG, 1, (uint16_t)(meta & 3))};
+    case PLANKS: return {makeStack(PLANKS, 1, (uint16_t)(meta & 3))};
+    case SANDSTONE: return {makeStack(SANDSTONE, 1, (uint16_t)(meta & 3))};
     case GRASS: case SNOW: case FARMLAND: return {makeStack(DIRT)};
     case STONE: return {makeStack(COBBLE)};
     case COAL_ORE: return {makeStack(COAL)};

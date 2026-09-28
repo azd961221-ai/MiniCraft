@@ -138,6 +138,13 @@ static void localBoxes(const World& w, uint8_t b, uint8_t meta, int x, int y, in
         return;
     }
     case Shape::Cactus: out.push_back({{k, 0, k}, {1 - k, 1 - k, 1 - k}}); return;
+    case Shape::Chest:
+        if (isSolid(b)) out.push_back({{k, 0, k}, {1 - k, 14 * k, 1 - k}});
+        return;
+    case Shape::Anvil:
+        if ((meta & 1) == 0) out.push_back({{2 * k, 0, 0}, {14 * k, 1, 1}});
+        else out.push_back({{0, 0, 2 * k}, {1, 1, 14 * k}});
+        return;
     case Shape::Cake: out.push_back({{(1 + 2 * (meta & 7)) * k, 0, k}, {1 - k, 0.5f, 1 - k}}); return;
     default:
         if (isSolid(b)) out.push_back({{0, 0, 0}, {1, 1, 1}});

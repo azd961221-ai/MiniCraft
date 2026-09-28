@@ -2548,7 +2548,15 @@ bool MobManager::save(const std::string& path, const Player& p, const std::vecto
 }
 
 bool MobManager::load(const std::string& path, Player& p, std::vector<ItemEntity>* items) {
+    const size_t mobs0 = mobs.size(), vehicles0 = vehicles.size(), items0 = items ? items->size() : 0;
+    const auto populated0 = populated;
     if (loadFrom(path, p, items)) return true;
+    // Основной файл оборвался посередине: убираем уже прочитанное из него, иначе с .bak мобы,
+    // транспорт и предметы на земле загрузились бы второй раз поверх
+    mobs.erase(mobs.begin() + (long)std::min(mobs0, mobs.size()), mobs.end());
+    vehicles.erase(vehicles.begin() + (long)std::min(vehicles0, vehicles.size()), vehicles.end());
+    if (items) items->erase(items->begin() + (long)std::min(items0, items->size()), items->end());
+    populated = populated0;
     return fileExistsUtf8(path + ".bak") && loadFrom(path + ".bak", p, items);
 }
 

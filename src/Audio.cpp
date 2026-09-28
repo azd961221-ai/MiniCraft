@@ -16,6 +16,16 @@
 
 namespace fs = std::filesystem;
 
+// Звук из файла по пути в UTF-8. На Windows узкий API miniaudio понимает только кодовую страницу ANSI —
+// с кириллицей в пути (C:\Users\Кирилл\...) не загрузился бы ни один звук, поэтому — через широкие строки
+static ma_result initSoundFile(ma_engine* engine, const std::string& path, ma_uint32 flags, ma_sound* sound) {
+#ifdef _WIN32
+    return ma_sound_init_from_file_w(engine, fs::u8path(path).wstring().c_str(), flags, nullptr, nullptr, sound);
+#else
+    return ma_sound_init_from_file(engine, path.c_str(), flags, nullptr, nullptr, sound);
+#endif
+}
+
 struct Audio::Impl {
     ma_engine engine;
     std::list<ma_sound> sounds; // одноразовые звуки; удаляются после окончания
@@ -93,7 +103,7 @@ void Audio::play(const std::string& name, float volume, float pitch, const glm::
     impl_->sounds.emplace_back();
     ma_sound* s = &impl_->sounds.back();
     // DECODE — декодировать целиком; менеджер ресурсов кэширует повторные загрузки
-    if (ma_sound_init_from_file(&impl_->engine, file.c_str(), MA_SOUND_FLAG_DECODE, nullptr, nullptr, s) != MA_SUCCESS) {
+    if (initSoundFile(&impl_->engine, file, MA_SOUND_FLAG_DECODE, s) != MA_SUCCESS) {
         impl_->sounds.pop_back();
         return;
     }
@@ -145,7 +155,7 @@ void Audio::playRecord(const std::string& name, const glm::vec3& pos) {
     if (!impl_) return;
     stopRecord();
     std::string file = (fs::u8path(root_) / "records" / fs::u8path(name + ".ogg")).u8string();
-    if (ma_sound_init_from_file(&impl_->engine, file.c_str(), MA_SOUND_FLAG_STREAM, nullptr, nullptr, &impl_->record) != MA_SUCCESS)
+    if (initSoundFile(&impl_->engine, file, MA_SOUND_FLAG_STREAM, &impl_->record) != MA_SUCCESS)
         return;
     impl_->recordLoaded = true;
     ma_sound_set_position(&impl_->record, pos.x, pos.y, pos.z);
@@ -202,8 +212,7 @@ void Audio::update(float dt, bool underground) {
             }();
             if (!tracks.empty()) {
                 const std::string& t = tracks[std::uniform_int_distribution<size_t>(0, tracks.size() - 1)(impl_->rng)];
-                if (ma_sound_init_from_file(&impl_->engine, t.c_str(), MA_SOUND_FLAG_STREAM, nullptr, nullptr,
-                                            &impl_->music) == MA_SUCCESS) {
+                if (initSoundFile(&impl_->engine, t, MA_SOUND_FLAG_STREAM, &impl_->music) == MA_SUCCESS) {
                     impl_->musicLoaded = true;
                     ma_sound_set_spatialization_enabled(&impl_->music, MA_FALSE);
                     ma_sound_set_volume(&impl_->music, musicVolume);

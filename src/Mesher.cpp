@@ -411,7 +411,54 @@ void World::buildMesh(Chunk& c) {
 
                 // ---- Кровать, редстоун: пыль, рычаг, кнопка, плита, повторитель; таблички рисует игра
                 if (shape == Shape::Sign) continue;
-                if (shape == Shape::Chest) { c.chests.push_back(glm::ivec3(c.cx * CW + x, y, c.cz * CW + z)); continue; }
+                if (shape == Shape::Chest || shape == Shape::Skull) { c.chests.push_back(glm::ivec3(c.cx * CW + x, y, c.cz * CW + z)); continue; }
+                if (shape == Shape::Anvil || shape == Shape::Beacon || shape == Shape::FlowerPot) {
+                    const float k = 1.f / 16.f;
+                    int edgeMask = 63; // грани на краю блока прячутся за непрозрачным соседом
+                    for (int d = 0; d < 6; ++d)
+                        if (isOpaque(P(x + DIRS[d][0], y + DIRS[d][1], z + DIRS[d][2]))) edgeMask &= ~(1 << d);
+                    int tex[6];
+                    for (int d = 0; d < 6; ++d) tex[d] = blockTex(b, d, meta);
+                    if (shape == Shape::Beacon) {
+                        // RenderBlocks.renderBlockBeacon 1.4.2: стекло, обсидиановое основание, ядро маяка
+                        int glass[6], obs[6], core[6];
+                        for (int d = 0; d < 6; ++d) { glass[d] = T(1, 3); obs[d] = T(5, 2); core[d] = T(9, 2); }
+                        emitBox(mesh[MESH_CUTOUT], base, {0, 0, 0}, {1, 1, 1}, glass, edgeMask, ownSky, ownBl);
+                        emitBox(mesh[MESH_SOLID], base, {2 * k, 0.1f * k, 2 * k}, {14 * k, 3 * k, 14 * k}, obs, 63, ownSky, ownBl);
+                        emitBox(mesh[MESH_SOLID], base, {3 * k, 3 * k, 3 * k}, {13 * k, 14 * k, 13 * k}, core, 63, ownSky, ownBl);
+                    } else if (shape == Shape::FlowerPot) {
+                        emitBox(mesh[MESH_CUTOUT], base, {5 * k, 0, 5 * k}, {11 * k, 6 * k, 11 * k}, tex, edgeMask | 0x37, ownSky, ownBl);
+                    } else {
+                        // Наковальня (renderBlockAnvilOrient 1.4.2): четыре коробки, верхняя грань верхней — своя текстура;
+                        // бит 0 меты — длинная сторона вдоль X
+                        bool alongX = meta & 1;
+                        std::vector<std::pair<glm::vec3, glm::vec3>> parts;
+                        itemModelBoxes(ANVIL, parts);
+                        int baseTex[6];
+                        for (int d = 0; d < 6; ++d) baseTex[d] = T(7, 13);
+                        for (size_t i = 0; i < parts.size(); ++i) {
+                            glm::vec3 mn = parts[i].first, mx = parts[i].second;
+                            if (alongX) { std::swap(mn.x, mn.z); std::swap(mx.x, mx.z); }
+                            bool top = i + 1 == parts.size();
+                            // На краю блока: у основания — низ, у верха — торцы по длинной стороне (верх рисуется отдельно)
+                            int ends = alongX ? 0x03 : 0x30;
+                            int mask = top ? ((edgeMask & ends) | (0x3F & ~ends & ~4)) : i == 0 ? (edgeMask | 0x37) : 63;
+                            emitBox(mesh[MESH_SOLID], base, mn, mx, baseTex, mask, ownSky, ownBl);
+                            if (top) {
+                                // Верх: рисунок вдоль длинной стороны (при повороте UV транспонируются)
+                                glm::vec3 q[4] = {base + glm::vec3(mn.x, mx.y, mn.z), base + glm::vec3(mn.x, mx.y, mx.z),
+                                                  base + glm::vec3(mx.x, mx.y, mx.z), base + glm::vec3(mx.x, mx.y, mn.z)};
+                                glm::vec2 uv[4];
+                                for (int j = 0; j < 4; ++j) {
+                                    glm::vec3 lp = q[j] - base;
+                                    uv[j] = alongX ? glm::vec2(lp.z, lp.x) : glm::vec2(lp.x, lp.z);
+                                }
+                                if (edgeMask & 4) quadUV(mesh[MESH_SOLID], q, uv, tex[2], 1.f, ownSky, ownBl, glm::vec3(1), true);
+                            }
+                        }
+                    }
+                    continue;
+                }
                 if (shape == Shape::Piston || shape == Shape::PistonHead) {
                     int f = meta & 7;
                     const float k = 1.f / 16.f;

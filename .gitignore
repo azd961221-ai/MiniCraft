@@ -1,0 +1,16 @@
+# Сборка CMake / Visual Studio — всё пересоздаёт build.bat (cmake -S . -B build)
+build/
+out/
+.vs/
+CMakeUserPresets.json
+*.obj
+*.pdb
+*.ilk
+*.tlog
+
+# Раздача package.ps1 (dist\MiniCraft.zip, dist\_stage) и сохранения в ней
+dist/
+
+# Временные файлы
+*.tmp
+__pycache__/

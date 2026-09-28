@@ -76,7 +76,11 @@ enum class Shape : uint8_t {
     Stem,        // стебель тыквы/арбуза (мета — возраст 0..7)
     Vine,        // лоза (мета — стороны: 1 юг, 2 запад, 4 север, 8 восток)
     LilyPad,     // кувшинка на воде
-    Chest        // сундук: рисуется моделью с крышкой (item/chest.png, largechest.png), в чанке — ничего
+    Chest,       // сундук: рисуется моделью с крышкой (item/chest.png, largechest.png), в чанке — ничего
+    Anvil,       // наковальня 1.4.2: четыре коробки (биты 0-1 — поворот, 2-3 — износ)
+    Beacon,      // маяк 1.4.2: стеклянная оболочка, обсидиановое основание, ядро
+    FlowerPot,   // цветочный горшок 1.4.2
+    Skull        // голова моба 1.4.2: рисуется моделью с текстурой моба (мета — вид), в чанке — ничего
 };
 
 // Какой инструмент ускоряет добычу
@@ -140,7 +144,7 @@ inline const BlockInfo& blockInfo(uint8_t b) {
         /* LAVA         */ {"Lava",           S::Cube,        false, -1.0f, So::None,   T(13, 14), T(13, 14), T(13, 14), 255, Tl::None, -1},
         /* FURNACE      */ {"Furnace",        S::Cube,        true,   3.5f, So::Stone,  T(14, 3), T(14, 3), T(13, 2), T(12, 2), Tl::Pickaxe, 0},
         /* FURNACE_LIT  */ {"Furnace",        S::Cube,        true,   3.5f, So::Stone,  T(14, 3), T(14, 3), T(13, 2), T(13, 3), Tl::Pickaxe, 0},
-        /* CHEST        */ {"Chest",          S::Chest,        true,   2.5f, So::Wood,   T(9, 1), T(9, 1), T(10, 1), T(11, 1), Tl::Axe, -1},
+        /* CHEST        */ {"Chest",          S::Chest,        true,   2.5f, So::Wood,   T(10, 2), T(10, 2), T(10, 1), T(11, 1), Tl::Axe, -1},
         /* SAPLING      */ {"Sapling",        S::Cross,       false,  0.0f, So::Grass,  T(15, 0), T(15, 0), T(15, 0), 255, Tl::None, -1},
         /* FARMLAND     */ {"Farmland",       S::Cube,        true,   0.6f, So::Gravel, T(7, 5), T(2, 0), T(2, 0), 255, Tl::Shovel, -1},
         /* WHEAT        */ {"Crops",          S::Crop,        false,  0.0f, So::Grass,  T(8, 5), T(8, 5), T(8, 5), 255, Tl::None, -1},
@@ -217,18 +221,18 @@ inline const BlockInfo& blockInfo(uint8_t b) {
         /* LILY_PAD     */ {"Lily Pad",       S::LilyPad,     true,   0.0f, So::Grass,  T(12, 4), T(12, 4), T(12, 4), 255, Tl::None, -1},
         /* POWERED_RAIL */ {"Powered Rail",   S::Rail,        false,  0.7f, So::Stone,  T(3, 10), T(3, 10), T(3, 10), 255, Tl::Pickaxe, -1},
         /* DETECTOR_RAIL*/ {"Detector Rail",  S::Rail,        false,  0.7f, So::Stone,  T(3, 12), T(3, 12), T(3, 12), 255, Tl::Pickaxe, -1},
-        /* EMERALD_ORE  */ {"Emerald Ore",    S::Cube,        true,   3.0f, So::Stone,  T(9, 11), T(9, 11), T(9, 11), 255, Tl::Pickaxe, 2},
+        /* EMERALD_ORE  */ {"Emerald Ore",    S::Cube,        true,   3.0f, So::Stone,  T(11, 10), T(11, 10), T(11, 10), 255, Tl::Pickaxe, 2},
         /* EMERALD_BLOCK*/ {"Block of Emerald", S::Cube,      true,   5.0f, So::Stone,  T(9, 1), T(9, 1), T(9, 1), 255, Tl::Pickaxe, 2},
         /* COMMAND_BLOCK*/ {"Command Block",  S::Cube,        true,  -1.0f, So::Stone,  T(8, 11), T(8, 11), T(8, 11), 255, Tl::None, -1},
-        /* BEACON       */ {"Beacon",         S::Cutout,      true,   3.0f, So::Glass,  T(9, 13), T(9, 13), T(9, 13), 255, Tl::Pickaxe, 0},
-        /* ANVIL        */ {"Anvil",          S::Cube,        true,   5.0f, So::Stone,  T(7, 13), T(8, 13), T(8, 13), 255, Tl::Pickaxe, 0},
+        /* BEACON       */ {"Beacon",         S::Beacon,      true,   3.0f, So::Glass,  T(9, 2), T(9, 2), T(9, 2), 255, Tl::Pickaxe, 0},
+        /* ANVIL        */ {"Anvil",          S::Anvil,       true,   5.0f, So::Stone,  T(7, 14), T(7, 13), T(7, 13), 255, Tl::Pickaxe, 0},
         /* COBBLE_WALL  */ {"Cobblestone Wall", S::Fence,     true,   2.0f, So::Stone,  T(0, 1), T(0, 1), T(0, 1), 255, Tl::Pickaxe, 0},
-        /* FLOWER_POT   */ {"Flower Pot",     S::Crop,        false,  0.0f, So::Stone,  T(10, 13), T(10, 13), T(10, 13), 255, Tl::None, -1},
+        /* FLOWER_POT   */ {"Flower Pot",     S::FlowerPot,   false,  0.0f, So::Stone,  T(2, 0), T(10, 11), T(10, 11), 255, Tl::None, -1},
         /* CARROTS      */ {"Carrots",        S::Crop,        false,  0.0f, So::Grass,  T(8, 12), T(8, 12), T(8, 12), 255, Tl::None, -1},
         /* POTATOES     */ {"Potatoes",       S::Crop,        false,  0.0f, So::Grass,  T(12, 12), T(12, 12), T(12, 12), 255, Tl::None, -1},
         /* WOOD_BUTTON  */ {"Button",         S::Button,      false,  0.5f, So::Wood,   T(4, 0), T(4, 0), T(4, 0), 255, Tl::Axe, -1},
-        /* SKULL_BLOCK  */ {"Mob Head",       S::Crop,        false,  1.0f, So::Stone,  T(0, 9), T(0, 9), T(0, 9), 255, Tl::Pickaxe, 0},
-        /* ENDER_CHEST  */ {"Ender Chest",    S::Chest,       true,  22.5f, So::Stone,  T(9, 1), T(9, 1), T(10, 1), T(11, 1), Tl::Pickaxe, 0},
+        /* SKULL_BLOCK  */ {"Mob Head",       S::Skull,       false,  1.0f, So::Stone,  T(8, 6), T(8, 6), T(8, 6), 255, Tl::Pickaxe, 0},
+        /* ENDER_CHEST  */ {"Ender Chest",    S::Chest,       true,  22.5f, So::Stone,  T(10, 3), T(10, 3), T(9, 3), T(11, 11), Tl::Pickaxe, 0},
     };
     return INFO[b < BLOCK_COUNT ? b : 0];
 }
@@ -353,12 +357,22 @@ inline void itemModelBoxes(uint8_t b, std::vector<std::pair<glm::vec3, glm::vec3
     case Shape::Frame: out.push_back({{0, 0, 0}, {1, 13 * k, 1}}); return;
     case Shape::Button: out.push_back({{5 * k, 6 * k, 6 * k}, {11 * k, 10 * k, 10 * k}}); return;
     case Shape::Repeater: out.push_back({{0, 0, 0}, {1, 2 * k, 1}}); return;
+    case Shape::Anvil:
+        // RenderBlocks.renderBlockAnvilOrient 1.4.2: основание, плита, шейка, верх
+        out.push_back({{2 * k, 0, 2 * k}, {14 * k, 4 * k, 14 * k}});
+        out.push_back({{4 * k, 4 * k, 3 * k}, {12 * k, 5 * k, 13 * k}});
+        out.push_back({{6 * k, 5 * k, 4 * k}, {10 * k, 10 * k, 12 * k}});
+        out.push_back({{3 * k, 10 * k, 0}, {13 * k, 1, 1}});
+        return;
+    case Shape::FlowerPot: out.push_back({{5 * k, 0, 5 * k}, {11 * k, 6 * k, 11 * k}}); return;
+    case Shape::Skull: out.push_back({{4 * k, 0, 4 * k}, {12 * k, 8 * k, 12 * k}}); return;
     default: out.push_back({{0, 0, 0}, {1, 1, 1}}); return;
     }
 }
 // Блок-предмет с вариантами в damage (древесина, шерсть, полублоки)
 inline bool blockHasVariants(uint8_t b) {
-    return b == LOG || b == LEAVES || b == SAPLING || b == WOOL || b == SLAB || b == DOUBLE_SLAB || b == STONE_BRICK || b == MONSTER_EGG;
+    return b == LOG || b == LEAVES || b == SAPLING || b == WOOL || b == SLAB || b == DOUBLE_SLAB || b == STONE_BRICK || b == MONSTER_EGG ||
+           b == PLANKS || b == SANDSTONE || b == COBBLE_WALL;
 }
 
 // Сколько света поглощает блок (0..15), как lightOpacity в 1.0
@@ -417,7 +431,16 @@ inline int blockTex(uint8_t b, int dir, uint8_t meta = 2) {
         return 113 + ((j & 8) >> 3) + (j & 7) * 16;
     }
     if (isDoor(b)) return (meta & 8) ? i.top : i.side;
-    if (b == STONE_BRICK) return meta == 1 ? T(4, 6) : meta == 2 ? T(5, 6) : T(6, 3); // мшистый, треснутый
+    if (b == STONE_BRICK) return meta == 1 ? T(4, 6) : meta == 2 ? T(5, 6) : meta == 3 ? T(5, 13) : T(6, 3); // мшистый, треснутый, резной
+    // Доски 1.4.2: дуб, ель, берёза, джунгли
+    if (b == PLANKS) return (meta & 3) == 1 ? T(6, 12) : (meta & 3) == 2 ? T(6, 13) : (meta & 3) == 3 ? T(7, 12) : T(4, 0);
+    // Песчаник 1.4.2 (BlockSandStone): верх общий; у резного (1) и гладкого (2) низ как верх, свои бока
+    if (b == SANDSTONE) {
+        int m = meta & 3;
+        if (dir == 2 || (dir == 3 && (m == 1 || m == 2))) return T(0, 11);
+        if (dir == 3) return T(0, 13);
+        return m == 1 ? T(5, 14) : m == 2 ? T(6, 14) : T(0, 12);
+    }
     if (b == MONSTER_EGG) return meta == 1 ? T(0, 1) : meta == 2 ? T(6, 3) : T(1, 0);   // чешуйница в камне
     if (b == BED) {
         bool head = meta & 8;
@@ -434,16 +457,23 @@ inline int blockTex(uint8_t b, int dir, uint8_t meta = 2) {
     if (b == POWERED_RAIL) return (meta & 8) ? T(3, 11) : T(3, 10);
     if (b == RAIL && meta >= 6) return T(0, 7);
     if (b == NETHER_WART) return T(2 + std::min(2, (meta & 3) == 3 ? 2 : (meta & 3) >= 1 ? 1 : 0), 14);
-    if (b == LOG && dir != 2 && dir != 3) return (meta & 3) == 1 ? T(4, 7) : (meta & 3) == 2 ? T(5, 7) : T(4, 1);
-    if (b == LEAVES) return (meta & 3) == 1 ? T(4, 8) : T(4, 3);
-    if (b == SAPLING) return (meta & 3) == 1 ? T(15, 3) : (meta & 3) == 2 ? T(15, 4) : T(15, 0);
+    if (b == LOG && dir != 2 && dir != 3) return (meta & 3) == 1 ? T(4, 7) : (meta & 3) == 2 ? T(5, 7) : (meta & 3) == 3 ? T(9, 9) : T(4, 1);
+    if (b == LEAVES) return (meta & 3) == 1 ? T(4, 8) : (meta & 3) == 3 ? T(4, 12) : T(4, 3);
+    if (b == SAPLING) return (meta & 3) == 1 ? T(15, 3) : (meta & 3) == 2 ? T(15, 4) : (meta & 3) == 3 ? T(14, 1) : T(15, 0);
     if (b == TALL_GRASS) return meta == 2 ? T(8, 3) : T(7, 2);
     if (b == FARMLAND && dir == 2) return meta > 0 ? T(6, 5) : T(7, 5);
     if (b == COBBLE_WALL) return (meta & 1) ? T(4, 2) : T(0, 1);
-    if (b == CARROTS) { int s = std::min(3, (meta & 7) / 2); return T(8 + s, 12); }
-    if (b == POTATOES) { int s = std::min(3, (meta & 7) / 2); return T(12 + s, 12); }
-    if (b == ANVIL) return dir == 2 ? T(7, 13) : T(8, 13);
-    if (b == SKULL_BLOCK) return T(std::min(4, meta & 7), 9);
+    if (b == CARROTS || b == POTATOES) {
+        int m = meta & 7;
+        if (m == 7) return b == CARROTS ? T(11, 12) : T(12, 12);
+        return T(8 + (std::min(m, 5) >> 1), 12);
+    }
+    // Наковальня: верх по износу (биты 2-3: целая, повреждённая, сильно повреждённая), остальное — основание
+    if (b == ANVIL) {
+        if (dir != 2) return T(7, 13);
+        int dmg = (meta >> 2) & 3;
+        return dmg == 1 ? T(8, 13) : dmg == 2 ? T(8, 14) : T(7, 14);
+    }
     if (dir == 2) return i.top;
     if (dir == 3) return i.bottom;
     if (i.front != 255 && dir == facingToDir(meta)) return i.front;
@@ -485,5 +515,7 @@ inline int tintType(uint8_t b, int dir, uint8_t meta) {
 
 // Тайлы, которые в terrain.png серые и красятся под биом
 inline bool tileNeedsGrassTint(int t) { return t == T(0, 0) || t == T(7, 2) || t == T(8, 3); }
-inline bool tileNeedsFoliageTint(int t) { return t == T(4, 3) || t == T(5, 3) || t == T(4, 8) || t == T(5, 8) || t == T(15, 8); }
+inline bool tileNeedsFoliageTint(int t) {
+    return t == T(4, 3) || t == T(5, 3) || t == T(4, 8) || t == T(5, 8) || t == T(15, 8) || t == T(4, 12) || t == T(5, 12); // + листва джунглей
+}
 inline bool isClimbable(uint8_t b) { return b == LADDER || b == VINE; }

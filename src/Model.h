@@ -22,7 +22,8 @@ inline glm::vec2 mobTexSize(MobType t) {
     if (t == MobType::EnderCrystal) return glm::vec2(64.f, 32.f);
     if (t == MobType::IronGolem) return glm::vec2(128.f, 128.f);
     if (t == MobType::Witch) return glm::vec2(64.f, 128.f);
-    if (t == MobType::SnowGolem || t == MobType::Villager || t == MobType::Bat || t == MobType::Wither || t == MobType::ZombieVillager)
+    if (t == MobType::SnowGolem || t == MobType::Villager || t == MobType::Bat || t == MobType::Wither || t == MobType::ZombieVillager ||
+        t == MobType::Zombie || t == MobType::PigZombie) // ModelZombie 1.4.2 — 64x64
         return glm::vec2(64.f, 64.f);
     return glm::vec2(64.f, 32.f);
 }

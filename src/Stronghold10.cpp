@@ -295,7 +295,7 @@ const LootE LOOT_LIBRARY[] = {{BOOK, 0, 1, 3, 20}, {PAPER, 0, 2, 7, 20}, {MAP, 0
 
 const void* World::strongholdLayout10(int X, int Z) const {
     static thread_local std::map<std::pair<uint32_t, int64_t>, StrongholdLayout> cache;
-    auto key = std::make_pair(seed_, ((int64_t)X << 32) ^ (uint32_t)Z);
+    auto key = std::make_pair(seed_, chunkKey(X, Z));
     auto it = cache.find(key);
     if (it == cache.end()) {
         if (cache.size() > 16) cache.clear();
