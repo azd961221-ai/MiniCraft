@@ -314,6 +314,7 @@ void World::buildMesh(Chunk& c) {
     const float inv15 = 1.f / 15.f;
     c.chests.clear();
     c.endPortals.clear();
+    c.beacons.clear();
 
     for (int y = 0; y < CH; ++y) {
         for (int z = 0; z < CW; ++z) {
@@ -450,6 +451,7 @@ void World::buildMesh(Chunk& c) {
                     int tex[6];
                     for (int d = 0; d < 6; ++d) tex[d] = blockTex(b, d, meta);
                     if (shape == Shape::Beacon) {
+                        c.beacons.push_back(glm::ivec3(c.cx * CW + x, y, c.cz * CW + z));
                         // RenderBlocks.renderBlockBeacon 1.4.2: стекло, обсидиановое основание, ядро маяка
                         int glass[6], obs[6], core[6];
                         for (int d = 0; d < 6; ++d) { glass[d] = T(1, 3); obs[d] = T(5, 2); core[d] = T(9, 2); }

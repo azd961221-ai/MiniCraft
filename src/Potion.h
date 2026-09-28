@@ -12,7 +12,8 @@ enum PotionEffect : int {
     EFF_WEAKNESS = 8, EFF_STRENGTH = 9, EFF_SLOWNESS = 10, EFF_HARM = 12,
     EFF_INVISIBILITY = 14,
     EFF_HUNGER = 17, // не варится — от сырой курицы и гнилой плоти
-    EFF_WITHER = 20  // от иссушителя и скелета-иссушителя
+    EFF_WITHER = 20, // от иссушителя и скелета-иссушителя
+    EFF_HASTE = 21, EFF_RESISTANCE = 22, EFF_JUMP = 23 // только от маяка (1.4.2)
 };
 
 inline int potionEffect(uint16_t d) { return (d & 8192 || d & 16384) ? (d & 15) : EFF_NONE; }
@@ -36,6 +37,9 @@ inline const char* effectName(int e) {
     case EFF_INVISIBILITY: return "Invisibility";
     case EFF_HUNGER: return "Hunger";
     case EFF_WITHER: return "Wither";
+    case EFF_HASTE: return "Haste";
+    case EFF_RESISTANCE: return "Resistance";
+    case EFF_JUMP: return "Jump Boost";
     default: return "";
     }
 }
@@ -70,6 +74,9 @@ inline uint32_t potionColor(uint16_t d) {
     case EFF_HARM: return 0x430A09;
     case EFF_INVISIBILITY: return 0x7F8392;
     case EFF_WITHER: return 0x352A27;
+    case EFF_HASTE: return 0xD9C043;
+    case EFF_RESISTANCE: return 0x99453A;
+    case EFF_JUMP: return 0x786297;
     default: return 0x385DC6; // вода
     }
 }
@@ -152,6 +159,12 @@ inline bool effectIcon(int e, int& u, int& v) {
     case EFF_REGEN: idx = 7; break;
     case EFF_FIRE_RES: idx = 15; break;
     case EFF_HUNGER: idx = 9; break;
+    case EFF_HASTE: idx = 2; break;       // значки 1.4.2 (inventory.png, Potion.setIconIndex)
+    case EFF_JUMP: idx = 10; break;
+    case EFF_RESISTANCE: idx = 14; break;
+    case EFF_INVISIBILITY: idx = 8; break;
+    case EFF_NIGHT_VISION: idx = 12; break;
+    case EFF_WITHER: idx = 17; break;
     default: return false;
     }
     u = (idx % 8) * 18;

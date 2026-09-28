@@ -59,6 +59,7 @@ struct Chunk {
     bool meshed = false;
     std::vector<glm::ivec3> chests; // сундуки в чанке (собираются при построении меша, рисуются моделью)
     std::vector<glm::ivec3> endPortals; // блоки портала Края (рисуются отдельным шейдером с глубиной)
+    std::vector<glm::ivec3> beacons;    // маяки (собираются при построении меша: луч и эффекты)
     GLuint vao[MESH_COUNT] = {}, vbo[MESH_COUNT] = {};
     int count[MESH_COUNT] = {};
 
@@ -221,7 +222,7 @@ public:
     void setGenVersion(int v) { genVersion_ = v; }
     // Большой дуб (WorldGenBigTree 1.0) высотой heightLimit; крона не выходит за чанк. false — не поместился
     bool bigTreeInChunk(Chunk& c, int x, int y, int z, int heightLimit, uint32_t& rng);
-    int genVersion() const { return genVersion_; } // 1 — старый, 2 — как в 1.0, 3 — + родники и большие дубы
+    int genVersion() const { return genVersion_; } // 1 — старый, 2 — как в 1.0, 3 — + родники и большие дубы, 4 — + какао
     // Портал: огонь внутри обсидиановой рамки 4x5 зажигает его
     bool tryCreatePortal(int x, int y, int z);
     // Центры трёх крепостей (строгхолдов) — туда летит око Края

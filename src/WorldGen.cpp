@@ -362,8 +362,8 @@ void World::treeInChunk(Chunk& c, int x, int y, int z, int type, uint32_t& seedS
         for (int dy = 0; dy < trunk; ++dy) c.set(x, y + dy, z, LOG, 1);
     } else {
         // Дуб и берёза: шар листвы 5x5 внизу и 3x3 сверху
-        // (джунгли 1.4.2: WorldGenTrees(4 + rand(7)) — выше обычного дуба)
-        int trunk = type == 2 ? r.range(5, 7) : type == 3 ? r.range(4, 10) : r.range(4, 6);
+        // (джунгли 1.4.2: WorldGenTrees(4 + rand(7)) — выше обычного дуба; только генератор 4, старые миры не меняются)
+        int trunk = type == 2 ? r.range(5, 7) : type == 3 && genVersion_ >= 4 ? r.range(4, 10) : r.range(4, 6);
         if (y + trunk + 2 >= CH) return;
         for (int dy = trunk - 3; dy <= trunk; ++dy) {
             int rad = dy >= trunk - 1 ? 1 : 2;
@@ -513,7 +513,7 @@ void World::decorate(Chunk& c, const int heights[CW][CW]) {
                     }
                 }
         }
-        if (isJungleBiome(center) && c.get(x, y + 1, z) == LOG) {
+        if (genVersion_ >= 4 && isJungleBiome(center) && c.get(x, y + 1, z) == LOG) {
             // Какао на стволе (WorldGenTrees 1.4.2 с лозой): у каждого пятого дерева выше 5 — на двух ярусах под кроной,
             // сторона с шансом 1/4 и 1/3, случайный возраст. Свой генератор, чтобы не сдвигать остальное наполнение
             int h = 0;

@@ -68,6 +68,11 @@ bool hurtPlayer(Player& p, int amount, TickEvents& ev, bool unblockable) {
         amount = total / 25;
         p.armorCarry = total % 25;
     }
+    if (p.hasEffect(22)) {
+        // Сопротивление (маяк 1.4.2, applyPotionDamageCalculations): минус 20% урона за уровень
+        amount = amount * (25 - (p.effectAmp(22) + 1) * 5) / 25;
+        if (amount <= 0) return false;
+    }
     p.health -= amount;
     p.invulnerable = 10;
     p.hurtTime = 10;
@@ -164,6 +169,7 @@ void tickPlayer(Player& p, World& w, const MoveInput& in, TickEvents& ev) {
         float accel = p.onGround ? speed * (0.16277136f / (slip * slip * slip)) : (p.sprinting ? 0.026f : 0.02f);
         if (p.onGround && in.jump) {
             p.motion.y = 0.42f;
+            if (p.hasEffect(23)) p.motion.y += 0.1f * (p.effectAmp(23) + 1); // прыгучесть (маяк)
             if (p.sprinting) {
                 float s = std::sin(glm::radians(p.yaw)), c = std::cos(glm::radians(p.yaw));
                 p.motion += glm::vec3(c, 0, s) * 0.2f;
@@ -220,7 +226,7 @@ void tickPlayer(Player& p, World& w, const MoveInput& in, TickEvents& ev) {
             trampleRng ^= trampleRng << 13; trampleRng ^= trampleRng >> 17; trampleRng ^= trampleRng << 5;
             w.trampleFarmland((int)std::floor(p.pos.x), (int)std::floor(p.pos.y - 0.2f), (int)std::floor(p.pos.z), p.fallDistance,
                               (trampleRng & 0xFFFFFF) / float(0x1000000));
-            int dmg = (int)std::ceil(p.fallDistance - 3.f);
+            int dmg = (int)std::ceil(p.fallDistance - 3.f - (p.hasEffect(23) ? p.effectAmp(23) + 1 : 0)); // прыгучесть смягчает
             if (dmg > 0) { p.damageSource = 2; hurtPlayer(p, dmg, ev, true); }
         }
         p.fallDistance = 0.f;

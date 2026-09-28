@@ -192,7 +192,7 @@ int main() {
         info.folder = info.name = props.level;
         info.seed = seedFromText(props.seed, (uint32_t)std::chrono::high_resolution_clock::now().time_since_epoch().count());
         info.gameMode = props.gamemode;
-        info.generator = 3;
+        info.generator = 4;
     }
     const std::string worldDir = saves.path(props.level);
     fs::create_directories(fs::u8path(worldDir + "players"));

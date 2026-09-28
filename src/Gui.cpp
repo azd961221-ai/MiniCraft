@@ -6,6 +6,7 @@
 #include <cstdio>
 #include "Enchant.h"
 #include "Potion.h"
+#include "Beacon.h"
 
 // ---------------------------------------------------------------- Отрисовка предмета
 
@@ -66,9 +67,36 @@ void ContainerScreen::open(GuiKind k, TileEntity* te, TileEntity* te2) {
     for (auto& c : craft_) c.clear();
     craftOut_.clear();
     scrollRow_ = 0;
+    wantClose = false;
     if (k == GuiKind::Creative) {
         if (palette_.empty()) initTabs();
     }
+}
+
+void ContainerScreen::openBeacon(uint8_t meta) {
+    beaconPrim_ = beaconPrimary(meta);
+    beaconSec_ = beaconSecondary(meta);
+}
+
+// Кнопки окна маяка (GuiBeacon.initGui 1.4.2): три яруса основных эффектов слева, вторичные справа, «готово» и «отмена»
+std::vector<ContainerScreen::BeaconBtn> ContainerScreen::beaconButtons(const GuiContext& ctx) const {
+    std::vector<BeaconBtn> b;
+    const int L = ctx.beaconLevels;
+    static const int TIERS[3][2] = {{1, 2}, {3, 4}, {5, 0}};
+    for (int t = 0; t < 3; ++t) {
+        int n = TIERS[t][1] ? 2 : 1, w = n * 22 + (n - 1) * 2;
+        for (int j = 0; j < n; ++j) {
+            int idx = TIERS[t][j];
+            b.push_back({76.f + j * 24 - w / 2, 22.f + t * 25, 0, idx, beaconEffect(idx), t < L, t < L && idx == beaconPrim_});
+        }
+    }
+    int n = beaconPrim_ > 0 ? 2 : 1, w = 2 * 22 + 2; // место под две кнопки, как в 1.4.2
+    b.push_back({167.f - w / 2, 47.f, 1, 1, EFF_REGEN, L >= 4, L >= 4 && beaconSec_ == 1});
+    if (n == 2) b.push_back({167.f + 24 - w / 2, 47.f, 1, 2, beaconEffect(beaconPrim_), L >= 4, L >= 4 && beaconSec_ == 2});
+    bool can = !beaconPay_.empty() && beaconPrim_ > 0 && beaconEffectTier(beaconPrim_) < L;
+    b.push_back({164.f, 107.f, 2, 0, 0, can, false});
+    b.push_back({190.f, 107.f, 3, 0, 0, true, false});
+    return b;
 }
 
 static const char* TAB_NAMES[12] = {
@@ -387,6 +415,7 @@ void ContainerScreen::close(GuiContext& ctx) {
     giveBack(enchantItem_);
     giveBack(anvilIn_[0]);
     giveBack(anvilIn_[1]);
+    giveBack(beaconPay_);
     anvilOut_.clear();
     anvilCost_ = 0;
     trashStack_.clear();
@@ -399,12 +428,14 @@ void ContainerScreen::close(GuiContext& ctx) {
 
 float ContainerScreen::panelW() const {
     if (kind == GuiKind::Creative) return 195.f;
+    if (kind == GuiKind::Beacon) return 230.f;
     return 176.f;
 }
 
 float ContainerScreen::panelH() const {
     switch (kind) {
     case GuiKind::Creative: return 136.f;
+    case GuiKind::Beacon: return 219.f;
     case GuiKind::Chest: return 114.f + chestRows() * 18;
     default: return 166.f;
     }
@@ -427,10 +458,10 @@ std::vector<ContainerScreen::Slot> ContainerScreen::slots(GuiContext& ctx) {
     auto add = [&](float x, float y, ItemStack* st, Role r, Group g, int i) { s.push_back({px + x, py + y, st, r, g, i}); };
 
     // Инвентарь игрока внизу окна
-    auto playerInv = [&](float mainY, float hotbarY) {
+    auto playerInv = [&](float mainY, float hotbarY, float x0 = 8.f) {
         for (int r = 0; r < 3; ++r)
-            for (int c = 0; c < 9; ++c) add(8.f + c * 18, mainY + r * 18, &ctx.inv.slots[9 + r * 9 + c], Role::Normal, MAIN, 9 + r * 9 + c);
-        for (int c = 0; c < 9; ++c) add(8.f + c * 18, hotbarY, &ctx.inv.slots[c], Role::Normal, HOTBAR, c);
+            for (int c = 0; c < 9; ++c) add(x0 + c * 18, mainY + r * 18, &ctx.inv.slots[9 + r * 9 + c], Role::Normal, MAIN, 9 + r * 9 + c);
+        for (int c = 0; c < 9; ++c) add(x0 + c * 18, hotbarY, &ctx.inv.slots[c], Role::Normal, HOTBAR, c);
     };
 
     switch (kind) {
@@ -460,6 +491,10 @@ std::vector<ContainerScreen::Slot> ContainerScreen::slots(GuiContext& ctx) {
             for (int r = 0; r < 3; ++r)
                 for (int c = 0; c < 3; ++c) add(62.f + c * 18, 17.f + r * 18, &tile->items[r * 3 + c], Role::Normal, CONTAINER, r * 3 + c);
         playerInv(84, 142);
+        break;
+    case GuiKind::Beacon:
+        add(136, 110, &beaconPay_, Role::Normal, CONTAINER, 0);
+        playerInv(137, 195, 36);
         break;
     case GuiKind::Anvil:
         add(27, 47, &anvilIn_[0], Role::Normal, CONTAINER, 0);
@@ -693,6 +728,10 @@ void ContainerScreen::shiftMove(GuiContext& ctx, Slot& sl) {
                 tile->items[i].count = 1;
                 if (--s.count == 0) s.clear();
             }
+    } else if (kind == GuiKind::Beacon && sl.group != CONTAINER && isBeaconPayment(s.id) && beaconPay_.empty()) {
+        beaconPay_ = s;
+        beaconPay_.count = 1;
+        if (--s.count == 0) s.clear();
     } else if (kind == GuiKind::Anvil) {
         moveInto(s, anvilIn_, 2);
     } else if (kind == GuiKind::Enchant && enchantItem_.empty() && itemEnchantability(s.id) > 0) {
@@ -812,9 +851,11 @@ void ContainerScreen::clickSlot(GuiContext& ctx, Slot& sl, int button, bool shif
 
     // Особые слоты 1.0: у стола зачарования — один предмет; у стойки зельеварения — бутылки/зелья по одному,
     // а сверху — только ингредиент
-    if (!shift && !cursor.empty() && sl.group == CONTAINER && (kind == GuiKind::Enchant || kind == GuiKind::Brewing)) {
-        bool single = kind == GuiKind::Enchant || sl.index < 3;
-        bool fits = kind == GuiKind::Enchant || (sl.index == 3 ? isBrewingIngredient(cursor.id) : (cursor.id == POTION || cursor.id == GLASS_BOTTLE));
+    // У маяка — один слиток, алмаз или изумруд
+    if (!shift && !cursor.empty() && sl.group == CONTAINER && (kind == GuiKind::Enchant || kind == GuiKind::Brewing || kind == GuiKind::Beacon)) {
+        bool single = kind != GuiKind::Brewing || sl.index < 3;
+        bool fits = kind == GuiKind::Enchant || (kind == GuiKind::Beacon ? isBeaconPayment(cursor.id)
+                  : sl.index == 3 ? isBrewingIngredient(cursor.id) : (cursor.id == POTION || cursor.id == GLASS_BOTTLE));
         if (!fits) return;
         if (single) {
             if (s.empty()) {
@@ -862,6 +903,26 @@ void ContainerScreen::clickSlot(GuiContext& ctx, Slot& sl, int button, bool shif
 }
 
 void ContainerScreen::mouseDown(GuiContext& ctx, int button, bool shift) {
+    if (kind == GuiKind::Beacon && button == 0) {
+        float px = (ctx.W - panelW()) / 2, py = (ctx.H - panelH()) / 2;
+        for (const BeaconBtn& b : beaconButtons(ctx)) {
+            if (ctx.mx < px + b.x || ctx.mx >= px + b.x + 22 || ctx.my < py + b.y || ctx.my >= py + b.y + 22) continue;
+            if (!b.enabled) return;
+            if (b.kind == 0) beaconPrim_ = b.value;
+            else if (b.kind == 1) beaconSec_ = b.value;
+            else if (b.kind == 2) {
+                // Готово: плата уходит, маяк запоминает выбор (вторичный — только при 4 уровнях)
+                int sec = ctx.beaconLevels >= 4 ? beaconSec_ : 0;
+                if (sec == 2 && beaconPrim_ == 0) sec = 0;
+                if (--beaconPay_.count == 0) beaconPay_.clear();
+                if (ctx.onBeaconConfirm) ctx.onBeaconConfirm(beaconMeta(beaconPrim_, sec));
+                wantClose = true;
+            } else {
+                wantClose = true;
+            }
+            return;
+        }
+    }
     if (kind == GuiKind::Enchant && button == 0) {
         float px = (ctx.W - panelW()) / 2, py = (ctx.H - panelH()) / 2;
         for (int i = 0; i < 3; ++i) {
@@ -933,8 +994,9 @@ void ContainerScreen::hotkey(GuiContext& ctx, int hotbarSlot) {
     ItemStack& hb = ctx.inv.slots[hotbarSlot];
     if (sl->role == Role::Palette) { hb = *sl->stack; hb.count = (uint8_t)maxStackSize(hb.id); return; }
     if (sl->role != Role::Normal) return;
-    if (sl->group == CONTAINER && !hb.empty() && (kind == GuiKind::Enchant || kind == GuiKind::Brewing)) {
-        bool fits = kind == GuiKind::Enchant ? hb.count == 1
+    if (sl->group == CONTAINER && !hb.empty() && (kind == GuiKind::Enchant || kind == GuiKind::Brewing || kind == GuiKind::Beacon)) {
+        bool fits = kind == GuiKind::Beacon ? hb.count == 1 && isBeaconPayment(hb.id)
+                  : kind == GuiKind::Enchant ? hb.count == 1
                   : sl->index == 3 ? isBrewingIngredient(hb.id) : (hb.count == 1 && (hb.id == POTION || hb.id == GLASS_BOTTLE));
         if (!fits) return;
     }
@@ -1002,6 +1064,32 @@ void ContainerScreen::draw(GuiContext& ctx) {
             float tw = ui.textWidth(t, sc) / sc;
             ui.text(t, (px + 168 - tw) * sc, (py + 69) * sc, sc,
                     !expensive && can ? glm::vec4(0.5f, 1.f, 0.125f, 1) : glm::vec4(1.f, 0.38f, 0.38f, 1));
+        }
+        break;
+    }
+    case GuiKind::Beacon: {
+        // GuiBeacon 1.4.2: окно 230x219, значки платы, кнопки 22x22 (фон — полоса v=219: обычная, выбранная,
+        // недоступная, под курсором), на кнопке — значок эффекта из inventory.png
+        img(ctx.tex.beacon, 0, 0, 0, 0, 230, 219);
+        const glm::vec4 lc(0.88f, 0.88f, 0.88f, 1);
+        auto centered = [&](const char* t, float cx, float y) {
+            float tw = ui.textWidth(t, sc) / sc;
+            ui.text(t, (px + cx - tw / 2) * sc, (py + y) * sc, sc, lc);
+        };
+        centered("Primary Power", 62, 10);
+        centered("Secondary Power", 169, 10);
+        const uint16_t pay[4] = {EMERALD, DIAMOND, GOLD_INGOT, IRON_INGOT};
+        for (int i = 0; i < 4; ++i) drawItemStack(ui, ctx.tex, makeStack(pay[i]), px + 42 + i * 22, py + 109, sc);
+        for (const BeaconBtn& b : beaconButtons(ctx)) {
+            bool hover = ctx.mx >= px + b.x && ctx.mx < px + b.x + 22 && ctx.my >= py + b.y && ctx.my < py + b.y + 22;
+            float u = !b.enabled ? 44.f : b.selected ? 22.f : hover ? 66.f : 0.f;
+            img(ctx.tex.beacon, b.x, b.y, u, 219, 22, 22);
+            if (b.kind == 2 || b.kind == 3) {
+                img(ctx.tex.beacon, b.x + 2, b.y + 2, b.kind == 2 ? 90.f : 112.f, 220, 18, 18);
+            } else {
+                int iu, iv;
+                if (effectIcon(b.effect, iu, iv)) img(ctx.tex.inventory, b.x + 2, b.y + 2, (float)iu, (float)iv, 18, 18);
+            }
         }
         break;
     }
@@ -1170,6 +1258,23 @@ void ContainerScreen::draw(GuiContext& ctx) {
         for (size_t i = 0; i < lines.size(); ++i) {
             ui.text(lines[i].first, tx * sc, ly * sc, sc, lines[i].second);
             ly += i == 0 ? 12.f : 10.f;
+        }
+    }
+
+    // Подсказка кнопки маяка: название эффекта
+    if (kind == GuiKind::Beacon && cursor.empty() && !hover) {
+        for (const BeaconBtn& b : beaconButtons(ctx)) {
+            if (ctx.mx < px + b.x || ctx.mx >= px + b.x + 22 || ctx.my < py + b.y || ctx.my >= py + b.y + 22) continue;
+            std::string t = b.kind == 2 ? "Done" : b.kind == 3 ? "Cancel" : effectName(b.effect);
+            if (b.effect == EFF_SPEED) t = "Speed";
+            if (b.kind == 1 && b.value == 2) t += " II";
+            float tw = ui.textWidth(t, sc) / sc, tx = ctx.mx + 12, ty = ctx.my - 12;
+            auto r = [&](float x0, float y0, float x1, float y1, glm::vec4 c) { ui.rect(x0 * sc, y0 * sc, x1 * sc, y1 * sc, c); };
+            r(tx - 3, ty - 3, tx + tw + 3, ty + 11, {0.06f, 0.f, 0.06f, 0.94f});
+            r(tx - 2, ty - 2, tx + tw + 2, ty + 10, {0.31f, 0.f, 1.f, 0.3f});
+            r(tx - 1, ty - 1, tx + tw + 1, ty + 9, {0.06f, 0.f, 0.06f, 1.f});
+            ui.text(t, tx * sc, ty * sc, sc, glm::vec4(1));
+            break;
         }
     }
 

@@ -44,6 +44,7 @@
 #include "Enchant.h"
 #include "Physics.h"
 #include "Potion.h"
+#include "Beacon.h"
 #include "Player.h"
 #include "UI.h"
 #include "World.h"
@@ -1122,6 +1123,12 @@ int main(int argc, char** argv) {
         if (loadImage(assets + "misc/tunnel.png", ti)) { tunnelTex = makeTexture(ti); rep(tunnelTex); }
         if (loadImage(assets + "misc/particlefield.png", ti)) { fieldTex = makeTexture(ti); rep(fieldTex); }
     }
+    // Луч маяка: misc/beam.png с повтором (TileEntityBeaconRenderer 1.4.2)
+    GLuint beaconBeamTex = 0;
+    {
+        Image bi;
+        if (loadImage(assets + "misc/beam.png", bi)) beaconBeamTex = makeTexture(bi, true);
+    }
     // Сундуки: item/chest.png (64x64) и item/largechest.png (128x64)
     GLuint chestTex = 0, largeChestTex = 0, enderChestTex = 0;
     {
@@ -1222,7 +1229,9 @@ int main(int argc, char** argv) {
     guiTex2.furnace = makeTexture(furnaceImg);
     guiTex2.container = makeTexture(containerImg);
     {
-        Image trapImg, enchImg, alchImg, repairImg;
+        Image trapImg, enchImg, alchImg, repairImg, beaconImg;
+        load("gui/beacon.png", beaconImg);
+        guiTex2.beacon = makeTexture(beaconImg);
         load("gui/trap.png", trapImg);
         load("gui/enchant.png", enchImg);
         load("gui/alchemy.png", alchImg);
@@ -1710,11 +1719,18 @@ int main(int argc, char** argv) {
     };
 
     glm::ivec3 anvilPos(0); // наковальня, чьё окно открыто
+    glm::ivec3 beaconPos(0); // маяк, чьё окно открыто
+    std::vector<std::pair<glm::ivec3, int>> activeBeacons; // работающие маяки рядом и уровни пирамиды (раз в 80 тиков)
     auto makeCtx = [&](float mxG, float myG) {
         GuiContext c{ui, guiTex2, lastSc, lastW, lastH, mxG, myG, inv, throwItem};
         c.xpLevel = &player.xpLevel;
         c.creative = player.creative();
         c.effects = &player.effects;
+        if (gui.kind == GuiKind::Beacon && world) c.beaconLevels = beaconLevels(*world, beaconPos.x, beaconPos.y, beaconPos.z);
+        c.onBeaconConfirm = [&](uint8_t m) {
+            if (world && world->getBlock(beaconPos.x, beaconPos.y, beaconPos.z) == BEACON)
+                world->setBlock(beaconPos.x, beaconPos.y, beaconPos.z, BEACON, m); // в сети уходит правкой блока
+        };
         c.onAnvilUse = [&]() {
             // BlockAnvil 1.4.2: после работы с шансом 12% изнашивается (целая → повреждённая → сильно → ломается)
             glm::vec3 sp = glm::vec3(anvilPos) + 0.5f;
@@ -2477,12 +2493,33 @@ int main(int argc, char** argv) {
             updateMap(*md, *world, player.pos, dimension, dimension != 0);
             if (worldTime % 600 == 0) saveMaps();
         }
+        // Маяки (TileEntityBeacon.updateEntity): раз в 80 тиков пересчитываются пирамиды и раздаются эффекты
+        if (worldTime % 80 == 0) {
+            activeBeacons.clear();
+            for (auto& [ck, ch] : world->chunks) {
+                if (ch->beacons.empty()) continue;
+                float cdx = ch->cx * CW + 8.f - player.pos.x, cdz = ch->cz * CW + 8.f - player.pos.z;
+                if (cdx * cdx + cdz * cdz > 160.f * 160.f) continue;
+                for (const glm::ivec3& b : ch->beacons) {
+                    if (world->getBlock(b.x, b.y, b.z) != BEACON) continue;
+                    int lv = beaconLevels(*world, b.x, b.y, b.z);
+                    if (lv <= 0) continue;
+                    activeBeacons.push_back({b, lv});
+                    if (!player.dead)
+                        beaconApply(lv, world->getMeta(b.x, b.y, b.z), b, player.pos,
+                                    [&](int e, int amp, int ticks) { addEffect(player, e, amp, ticks); });
+                }
+            }
+        }
         // Крышка открытого сундука поднимается, остальные опускаются (по 0.1 за тик)
         {
             int64_t openKey = INT64_MIN;
             if (g_in.screen == Screen::Container && gui.kind == GuiKind::Anvil && world &&
                 world->getBlock(anvilPos.x, anvilPos.y, anvilPos.z) != ANVIL)
                 closeGui(); // наковальня сломалась или её убрали
+            if (g_in.screen == Screen::Container && gui.kind == GuiKind::Beacon && world &&
+                world->getBlock(beaconPos.x, beaconPos.y, beaconPos.z) != BEACON)
+                closeGui();
             if (g_in.screen == Screen::Container && gui.kind == GuiKind::Chest && gui.tile &&
                 (world->getBlock(gui.tile->x, gui.tile->y, gui.tile->z) == CHEST || world->getBlock(gui.tile->x, gui.tile->y, gui.tile->z) == ENDER_CHEST))
                 openKey = posKey(gui.tile->x, gui.tile->y, gui.tile->z);
@@ -3247,6 +3284,7 @@ int main(int argc, char** argv) {
             if (!mining.active || mining.pos != hit) mining = {hit, 0.f, true, 0};
             if (swing >= 1.f) swing = 0.f; // при копании взмахи идут один за другим, без обрыва
             float strength = player.creative() ? 1.f : breakStrength(target, held, player.eyeInWater && !player.aquaAffinity, player.onGround);
+            if (player.hasEffect(EFF_HASTE)) strength *= 1.f + 0.2f * (player.effectAmp(EFF_HASTE) + 1); // спешка (маяк)
             mining.progress += strength;
             if (mining.ticks++ % 4 == 0 && mining.progress < 1.f && strength > 0.f) audio.playHit(target, glm::vec3(hit) + 0.5f);
             if (mining.progress < 1.f && !player.creative()) {
@@ -3272,7 +3310,11 @@ int main(int argc, char** argv) {
             if (aimingGui) {
                 if (g_in.placeClick) {
                     if (target == CRAFTING_TABLE) openGui(GuiKind::Crafting, nullptr);
-                    else if (target == ANVIL) {
+                    else if (target == BEACON) {
+                        beaconPos = hit;
+                        openGui(GuiKind::Beacon, nullptr);
+                        gui.openBeacon(world->getMeta(hit.x, hit.y, hit.z));
+                    } else if (target == ANVIL) {
                         anvilPos = hit;
                         openGui(GuiKind::Anvil, nullptr);
                     } else if (target == ENDER_CHEST) {
@@ -4048,12 +4090,12 @@ int main(int argc, char** argv) {
             info.gameMode = nw->mode == 2 ? 1 : 0;
             info.hardcore = nw->mode == 1;
             info.seed = seedFromText(nw->seedText, randomSeed);
-            info.generator = 3; // новые миры — генератор 1.0 (+ родники и большие дубы)
+            info.generator = 4; // новые миры — генератор 1.0 (+ родники и большие дубы, 4 — какао и деревья джунглей 1.4.2)
             info.cheats = nw->cheats && !info.hardcore;
         } else if (!haveInfo) {
             info.folder = info.name = folder;
             info.seed = randomSeed;
-            info.generator = 3;
+            info.generator = 4;
         }
         seed = info.seed;
         player = Player{};
@@ -4955,6 +4997,11 @@ int main(int argc, char** argv) {
             S(9, 0, 2, STONE_BRICK, 3); S(9, 0, 4, COBBLE_WALL, 1); S(9, 0, 6, FARMLAND, 7); S(9, 1, 6, CARROTS, 7);
             S(9, 0, 8, FARMLAND, 7); S(9, 1, 8, POTATOES, 3); S(9, 0, 10, COMMAND_BLOCK); S(9, 0, 12, EMERALD_BLOCK);
             S(6, 0, 14, COBBLE); S(6, 1, 14, COBBLE);
+            // Маяк на пирамиде в 4 уровня (скорость + регенерация); MC_SHOW_BEACON_GUI — сразу открыть его окно
+            for (int i = 1; i <= 4; ++i)
+                for (int dx = -i; dx <= i; ++dx)
+                    for (int dz = -i; dz <= i; ++dz) S(4 + dx, -i, 28 + dz, i == 1 ? EMERALD_BLOCK : i == 2 ? DIAMOND_BLOCK : i == 3 ? GOLD_BLOCK : IRON_BLOCK);
+            S(4, 0, 28, BEACON, beaconMeta(1, 1));
             // Ствол джунглей с какао трёх возрастов
             S(9, 0, 14, LOG, 3); S(9, 1, 14, LOG, 3); S(9, 2, 14, LOG, 3);
             S(8, 1, 14, COCOA, 3 | (2 << 2)); S(9, 1, 13, COCOA, 0 | (1 << 2)); S(9, 2, 15, COCOA, 2); S(10, 1, 14, COCOA, 1 | (2 << 2));
@@ -5024,6 +5071,12 @@ int main(int argc, char** argv) {
                                          makeStack(SKULL_ITEM, 1, 2), makeStack(CHAIN_HELMET), makeStack(FLOWER_POT_ITEM),
                                          makeStack(ITEM_FRAME_ITEM), makeStack(PLANKS, 64, 1)};
             for (int i = 0; i < 9; ++i) inv.slots[i] = bar142[i];
+            if (std::getenv("MC_SHOW_BEACON_GUI")) {
+                beaconPos = o + glm::ivec3(4, 0, 28);
+                openGui(GuiKind::Beacon, nullptr);
+                gui.openBeacon(beaconMeta(1, 1));
+                inv.slots[8] = makeStack(IRON_INGOT, 5);
+            }
             world->setBlock(o.x, o.y + 2, o.z + 9, ENDER_CHEST, 5); // эндер-сундук у игрока (ПКМ — личный инвентарь)
             world->setBlock(o.x, o.y + 2, o.z + 10, ANVIL, 1);      // наковальня рядом (ремонт)
             inv.slots[9] = makeStack(DIAMOND_PICKAXE);
@@ -5166,7 +5219,7 @@ int main(int argc, char** argv) {
                         pendingCredits = false;
                         creditsTime = 0;
                         openScreen(win, Screen::Credits);
-                    } else {
+                    } else if (gui.kind == GuiKind::None) { // витрина могла открыть окно (MC_SHOW_BEACON_GUI)
                         openScreen(win, player.dead ? Screen::Dead : Screen::Playing);
                     }
                 }
@@ -5223,7 +5276,7 @@ int main(int argc, char** argv) {
             if (g_in.mouseReleased) gui.mouseUp();
             if (g_in.scrollDelta != 0.f) gui.scroll(g_in.scrollDelta);
             if (g_in.invNumber >= 0) gui.hotkey(ctx, g_in.invNumber);
-            if (g_in.closeGui) closeGui();
+            if (g_in.closeGui || gui.wantClose) closeGui();
         }
         g_in.clickButton = -1;
         g_in.mouseReleased = false;
@@ -6663,6 +6716,62 @@ int main(int argc, char** argv) {
                 if (!wasBlend) glDisable(GL_BLEND);
                 glUseProgram(chunkProg);
                 glBindTexture(GL_TEXTURE_2D, terrainTex);
+            }
+        }
+
+        // Луч маяка (TileEntityBeaconRenderer 1.4.2): внутренний вращающийся столб (сложение цветов) и внешний
+        // полупрозрачный, высотой 256, текстура ползёт вверх
+        if (beaconBeamTex && !activeBeacons.empty()) {
+            std::vector<Vertex> inner, outer;
+            const float time = (float)(worldTime % 1000000) + partial;
+            const float f3 = -time * 0.2f - std::floor(-time * 0.1f);
+            const float ang = time * 0.025f * -1.5f, r = 0.2f, H = 256.f;
+            auto quad4 = [](std::vector<Vertex>& out, const glm::vec3 p[4], const glm::vec2 uv[4]) {
+                Vertex v[4];
+                for (int i = 0; i < 4; ++i) v[i] = Vertex{p[i].x, p[i].y, p[i].z, uv[i].x, uv[i].y, 1.f, 1.f, 1.f};
+                out.insert(out.end(), {v[0], v[1], v[2], v[0], v[2], v[3]});
+            };
+            for (const auto& [b, lv] : activeBeacons) {
+                if (world->getBlock(b.x, b.y, b.z) != BEACON) continue;
+                float dx = b.x + 0.5f - eye.x, dz = b.z + 0.5f - eye.z;
+                if (dx * dx + dz * dz > 256.f * 256.f) continue;
+                glm::vec3 o((float)b.x, (float)b.y, (float)b.z);
+                glm::vec3 c[4];
+                const float offs[4] = {2.3561945f, 0.7853982f, 3.9269908f, 5.4977871f};
+                for (int i = 0; i < 4; ++i) c[i] = o + glm::vec3(0.5f + std::cos(ang + offs[i]) * r, 0.f, 0.5f + std::sin(ang + offs[i]) * r);
+                const glm::vec3 up(0, H, 0);
+                float v0 = -1.f + f3, v1 = H * (0.5f / r) + v0;
+                const int sides[4][2] = {{0, 1}, {3, 2}, {1, 3}, {2, 0}};
+                for (auto& sd : sides) {
+                    glm::vec3 p[4] = {c[sd[0]] + up, c[sd[0]], c[sd[1]], c[sd[1]] + up};
+                    glm::vec2 uv[4] = {{1, v1}, {1, v0}, {0, v0}, {0, v1}};
+                    quad4(inner, p, uv);
+                }
+                float w0 = -1.f + f3, w1 = H + w0;
+                glm::vec3 s[4] = {o + glm::vec3(0.2f, 0, 0.2f), o + glm::vec3(0.8f, 0, 0.2f), o + glm::vec3(0.8f, 0, 0.8f), o + glm::vec3(0.2f, 0, 0.8f)};
+                for (int i = 0; i < 4; ++i) {
+                    glm::vec3 a = s[i], bb = s[(i + 1) & 3];
+                    glm::vec3 p[4] = {a + up, a, bb, bb + up};
+                    glm::vec2 uv[4] = {{1, w1}, {1, w0}, {0, w0}, {0, w1}};
+                    quad4(outer, p, uv);
+                }
+            }
+            if (!inner.empty()) {
+                GLboolean wasCull = glIsEnabled(GL_CULL_FACE), wasBlend = glIsEnabled(GL_BLEND);
+                glDisable(GL_CULL_FACE);
+                glEnable(GL_BLEND);
+                glBindTexture(GL_TEXTURE_2D, beaconBeamTex);
+                glUniform1f(glGetUniformLocation(chunkProg, "uAlpha"), 32.f / 255.f);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+                drawDynamic(inner);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                glDepthMask(GL_FALSE);
+                drawDynamic(outer);
+                glDepthMask(GL_TRUE);
+                glUniform1f(glGetUniformLocation(chunkProg, "uAlpha"), 1.f);
+                glBindTexture(GL_TEXTURE_2D, terrainTex);
+                if (wasCull) glEnable(GL_CULL_FACE);
+                if (!wasBlend) glDisable(GL_BLEND);
             }
         }
 

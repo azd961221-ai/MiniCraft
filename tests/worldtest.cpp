@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <string>
 #include <cstring>
+#include "../src/Beacon.h"
 #include "../src/Map.h"
 #include "../src/Mob.h"
 #include "../src/Physics.h"
@@ -95,6 +96,38 @@ int main(int argc, char** argv) {
         bx.clear();
         blockCollision(w, 7, Y + 1, 31, bx);
         CHECK(bx.size() == 2 && bx[0].mn.y == Y + 1.5f);
+    }
+
+    // --- Маяк: уровни пирамиды, небо над маяком, эффекты в радиусе
+    {
+        const int bx = 30, by = Y + 12, bz = 30;
+        for (int i = 1; i <= 4; ++i)
+            for (int dx = -i; dx <= i; ++dx)
+                for (int dz = -i; dz <= i; ++dz) w.setBlock(bx + dx, by - i, bz + dz, i == 2 ? GOLD_BLOCK : IRON_BLOCK);
+        w.setBlock(bx, by, bz, BEACON, beaconMeta(3, 2)); // сопротивление II
+        CHECK(beaconLevels(w, bx, by, bz) == 4);
+        w.setBlock(bx, by + 3, bz, GLASS);
+        CHECK(beaconLevels(w, bx, by, bz) == 4); // стекло свет не задерживает
+        w.setBlock(bx, by + 3, bz, STONE);
+        CHECK(beaconLevels(w, bx, by, bz) == 0);
+        w.setBlock(bx, by + 3, bz, AIR);
+        w.setBlock(bx + 3, by - 3, bz - 3, DIRT); // дыра в третьем слое
+        CHECK(beaconLevels(w, bx, by, bz) == 2);
+        w.setBlock(bx + 3, by - 3, bz - 3, IRON_BLOCK);
+        int got = 0, amp = -1;
+        auto add = [&](int e, int a, int t) { if (e == EFF_RESISTANCE && t == 180) { ++got; amp = a; } };
+        beaconApply(4, w.getMeta(bx, by, bz), {bx, by, bz}, glm::vec3(bx + 45.f, by - 40.f, bz), add); // радиус 50
+        CHECK(got == 1 && amp == 1);
+        beaconApply(4, w.getMeta(bx, by, bz), {bx, by, bz}, glm::vec3(bx + 52.f, by, bz), add);  // дальше радиуса
+        beaconApply(4, w.getMeta(bx, by, bz), {bx, by, bz}, glm::vec3(bx, by - 51.f, bz), add);  // ниже радиуса
+        beaconApply(1, w.getMeta(bx, by, bz), {bx, by, bz}, glm::vec3(bx, by, bz), add);         // сопротивлению нужен 2-й ярус
+        CHECK(got == 1);
+        beaconApply(2, w.getMeta(bx, by, bz), {bx, by, bz}, glm::vec3(bx, by + 200.f, bz), add); // вверх — без предела, II только с 4
+        CHECK(got == 2 && amp == 0);
+        for (int i = 1; i <= 4; ++i)
+            for (int dx = -i; dx <= i; ++dx)
+                for (int dz = -i; dz <= i; ++dz) w.setBlock(bx + dx, by - i, bz + dz, AIR);
+        w.setBlock(bx, by, bz, AIR);
     }
 
     // --- Грядка: прыжок вытаптывает, посев срывается с метой
