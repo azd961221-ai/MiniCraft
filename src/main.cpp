@@ -3515,13 +3515,26 @@ int main(int argc, char** argv) {
                 }
                 damageHeld(1);
                 startSwing();
+            } else if (held.id == DYE && held.damage == DYE_COCOA && hasHit && n.y == 0 && target == LOG &&
+                       (world->getMeta(hit.x, hit.y, hit.z) & 3) == 3 && isReplaceable(world->getBlock(prev.x, prev.y, prev.z)) &&
+                       !isLiquid(world->getBlock(prev.x, prev.y, prev.z))) {
+                // Какао-бобы сажаются на бок ствола джунглей (ItemDye 1.4.2); мета — где ствол: 0 юг, 1 запад, 2 север, 3 восток
+                uint8_t cm = n.z < 0 ? 0 : n.x > 0 ? 1 : n.z > 0 ? 2 : 3;
+                world->setBlock(prev.x, prev.y, prev.z, COCOA, cm);
+                audio.playDig(COCOA, glm::vec3(prev) + 0.5f);
+                consumeHeld();
+                startSwing();
             } else if (held.id == DYE && held.damage == DYE_BONE_MEAL && hasHit && (target == SAPLING || target == WHEAT || target == GRASS ||
-                                                                                               target == PUMPKIN_STEM || target == MELON_STEM)) {
+                                                                                               target == PUMPKIN_STEM || target == MELON_STEM ||
+                                                                                               target == CARROTS || target == POTATOES ||
+                                                                                               (target == COCOA && ((world->getMeta(hit.x, hit.y, hit.z) >> 2) & 3) < 2))) {
                 // Костная мука: мгновенный рост дерева, пшеницы и стеблей, трава и цветы вокруг
                 if (target == SAPLING) {
                     world->growTree(hit.x, hit.y, hit.z, gameRng, world->getMeta(hit.x, hit.y, hit.z) & 3);
-                } else if (target == WHEAT || target == PUMPKIN_STEM || target == MELON_STEM) {
+                } else if (target == WHEAT || target == PUMPKIN_STEM || target == MELON_STEM || target == CARROTS || target == POTATOES) {
                     world->setBlock(hit.x, hit.y, hit.z, target, 7);
+                } else if (target == COCOA) {
+                    world->setBlock(hit.x, hit.y, hit.z, COCOA, (uint8_t)((world->getMeta(hit.x, hit.y, hit.z) & 3) | 8));
                 } else if (world->getBlock(hit.x, hit.y + 1, hit.z) == AIR) {
                     for (int i = 0; i < 128; ++i) {
                         glm::ivec3 q = hit + glm::ivec3(0, 1, 0);
@@ -3844,15 +3857,22 @@ int main(int argc, char** argv) {
         // Средняя кнопка: выбрать блок (в творческом — взять в руку)
         if (g_in.pickClick && hasHit) {
             uint16_t want = target == FURNACE_LIT ? FURNACE : target == REEDS ? REEDS_ITEM : isDoubleSlab(target) ? singleSlabOf(target)
-                          : target == WOOD_DOOR ? WOOD_DOOR_ITEM : target == IRON_DOOR ? IRON_DOOR_ITEM : target == CAKE ? CAKE_ITEM : target;
+                          : target == WOOD_DOOR ? WOOD_DOOR_ITEM : target == IRON_DOOR ? IRON_DOOR_ITEM : target == CAKE ? CAKE_ITEM
+                          : target == COCOA ? DYE : target == REDSTONE_TORCH_OFF ? REDSTONE_TORCH_ON : target;
+            // Блоки, которые ставятся предметом (провод, повторитель, горшок, морковь, голова…) — ищем этот предмет
+            uint8_t placedAs = target == REPEATER_ON ? REPEATER_OFF : target;
+            if (want == target && isItemOnlyBlock(placedAs) && placedAs != REDSTONE_TORCH_OFF)
+                for (uint16_t id = BLOCK_COUNT; id < ITEM_ID_LIMIT; ++id)
+                    if (isValidItem(id) && placedBlock(id) == placedAs) { want = id; break; }
             uint8_t tm = world->getMeta(hit.x, hit.y, hit.z);
-            uint16_t variant = !blockHasVariants(target) ? 0
+            uint16_t variant = target == COCOA ? DYE_COCOA : target == SKULL_BLOCK ? (uint16_t)(tm & 7) : !blockHasVariants(target) ? 0
                              : (target == WOOL || target == MONSTER_EGG) ? (uint16_t)(tm & 15)
                              : (target == SLAB || target == DOUBLE_SLAB) ? (uint16_t)(tm & 7) : (uint16_t)(tm & 3);
             int found = -1;
             for (int i = 0; i < 9; ++i) if (inv.slots[i].id == want && inv.slots[i].damage == variant) found = i;
             if (found >= 0) g_in.selected = found;
-            else if (player.creative() && want != 0 && want != WHEAT && want != FARMLAND && want != MOB_SPAWNER)
+            else if (player.creative() && want != 0 && want != WHEAT && want != FARMLAND && want != MOB_SPAWNER && isValidItem(want) &&
+                     !(want < BLOCK_COUNT && isItemOnlyBlock((uint8_t)want)))
                 inv.slots[g_in.selected] = makeStack(want, 64, variant);
         }
         g_in.pickClick = false;
@@ -4935,6 +4955,9 @@ int main(int argc, char** argv) {
             S(9, 0, 2, STONE_BRICK, 3); S(9, 0, 4, COBBLE_WALL, 1); S(9, 0, 6, FARMLAND, 7); S(9, 1, 6, CARROTS, 7);
             S(9, 0, 8, FARMLAND, 7); S(9, 1, 8, POTATOES, 3); S(9, 0, 10, COMMAND_BLOCK); S(9, 0, 12, EMERALD_BLOCK);
             S(6, 0, 14, COBBLE); S(6, 1, 14, COBBLE);
+            // Ствол джунглей с какао трёх возрастов
+            S(9, 0, 14, LOG, 3); S(9, 1, 14, LOG, 3); S(9, 2, 14, LOG, 3);
+            S(8, 1, 14, COCOA, 3 | (2 << 2)); S(9, 1, 13, COCOA, 0 | (1 << 2)); S(9, 2, 15, COCOA, 2); S(10, 1, 14, COCOA, 1 | (2 << 2));
             for (int i = 0; i < 4; ++i) S(3, 1, 1 + i * 2, WOOD_SLAB, (uint8_t)(i | (i & 1 ? 8 : 0))); // деревянные плиты
             S(2, 1, 13, SLAB, 1 | 8); S(2, 1, 14, COBBLE_STAIRS, 0 | 4); S(2, 1, 15, SLAB, 4 | 8); S(2, 0, 15, SLAB, 4); // верх/низ
             if (placeItemFrame(mobMgr.paintings, *world, o + glm::ivec3(6, 0, 14), glm::ivec3(-1, 0, 0)))

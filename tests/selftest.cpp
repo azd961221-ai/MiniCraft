@@ -148,6 +148,8 @@ int main(int argc, char** argv) {
         ItemStack ws = findRecipe(g4, 3);
         CHECK(ws.id == WOOD_SLAB && ws.damage == 2 && ws.count == 6); // берёзовые доски → берёзовые плиты
         uint32_t r0 = 1;
+        CHECK(blockDrops(COCOA, 1 | 8, r0)[0].id == DYE && blockDrops(COCOA, 1 | 8, r0)[0].count == 3 &&
+              blockDrops(COCOA, 2 | 4, r0)[0].count == 1 && blockDrops(COCOA, 0, r0)[0].damage == DYE_COCOA);
         CHECK(blockDrops(DOUBLE_WOOD_SLAB, 3, r0)[0].id == WOOD_SLAB && blockDrops(DOUBLE_WOOD_SLAB, 3, r0)[0].count == 2);
         uint32_t rng = 7;
         CHECK(blockDrops(DOUBLE_SLAB, 1, rng)[0].count == 2);

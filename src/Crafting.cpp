@@ -310,6 +310,7 @@ std::vector<ItemStack> blockDrops(uint8_t block, uint8_t meta, uint32_t& rng) {
     case SLAB: return {makeStack(SLAB, 1, (uint16_t)(meta & 7))};
     case DOUBLE_SLAB: return {makeStack(SLAB, 2, (uint16_t)(meta & 7))};
     case WOOD_SLAB: return {makeStack(WOOD_SLAB, 1, (uint16_t)(meta & 3))};
+    case COCOA: return {makeStack(DYE, ((meta >> 2) & 3) >= 2 ? 3 : 1, DYE_COCOA)}; // спелый — 3 боба
     case DOUBLE_WOOD_SLAB: return {makeStack(WOOD_SLAB, 2, (uint16_t)(meta & 3))};
     case WOOL: return {makeStack(WOOL, 1, (uint16_t)(meta & 15))};
     case WOOD_DOOR: if (meta & 8) return {}; return {makeStack(WOOD_DOOR_ITEM)};

@@ -168,6 +168,20 @@ inline void blockBounds(uint8_t b, uint8_t meta, int x, int z, glm::vec3& mn, gl
         if ((meta & 1) == 0) { mn.x = 0.125f; mx.x = 0.875f; }
         else { mn.z = 0.125f; mx.z = 0.875f; }
         break;
+    case COCOA: {
+        // BlockCocoa.setBlockBoundsBasedOnState: ширина 4+2·возраст, высота 5+2·возраст, верх на 12/16, прижат к стволу
+        int age = std::min((meta >> 2) & 3, 2), w = 4 + age * 2, h = 5 + age * 2;
+        float c = (8 - w / 2) / 16.f, e = (15 - w) / 16.f, s = w / 16.f;
+        mn.y = (12 - h) / 16.f; mx.y = 12 / 16.f;
+        switch (meta & 3) {
+        case 0: mn.x = c; mn.z = e; break;
+        case 1: mn.x = 1 / 16.f; mn.z = c; break;
+        case 2: mn.x = c; mn.z = 1 / 16.f; break;
+        default: mn.x = e; mn.z = c; break;
+        }
+        mx.x = mn.x + s; mx.z = mn.z + s;
+        break;
+    }
     case FLOWER_POT: mn = {5 / 16.f, 0.f, 5 / 16.f}; mx = {11 / 16.f, 6 / 16.f, 11 / 16.f}; break;
     case SKULL_BLOCK:
         if (meta & 8) {

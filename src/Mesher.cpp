@@ -412,6 +412,36 @@ void World::buildMesh(Chunk& c) {
                 // ---- Кровать, редстоун: пыль, рычаг, кнопка, плита, повторитель; таблички рисует игра
                 if (shape == Shape::Sign) continue;
                 if (shape == Shape::Chest || shape == Shape::Skull) { c.chests.push_back(glm::ivec3(c.cx * CW + x, y, c.cz * CW + z)); continue; }
+                if (shape == Shape::Cocoa) {
+                    // RenderBlocks.renderBlockCocoa 1.4.2: бока — полоса тайла u 15-w..15, v 4..4+h; верх и низ — угол w×w;
+                    // черешок 4×4 (u 12..16, v 0..4) — плоскость от стручка к стволу
+                    glm::vec3 mn, mx;
+                    blockBounds(b, meta, 0, 0, mn, mx);
+                    int t = blockTex(b, 2, meta), age = std::min((meta >> 2) & 3, 2), w = 4 + age * 2, h = 5 + age * 2;
+                    const float k = 1.f / 16.f;
+                    auto& out = mesh[MESH_CUTOUT];
+                    for (int d = 0; d < 6; ++d) {
+                        glm::vec2 u(0, w * k), v(0, w * k);
+                        if (d < 2 || d > 3) { u = {(15 - w) * k, 15 * k}; v = {4 * k, (4 + h) * k}; }
+                        glm::vec3 p[4];
+                        glm::vec2 uv[4];
+                        for (int i = 0; i < 4; ++i) {
+                            const int* cr = FACE[d][i];
+                            p[i] = base + glm::vec3(cr[0] ? mx.x : mn.x, cr[1] ? mx.y : mn.y, cr[2] ? mx.z : mn.z);
+                            float fu = d < 2 ? (float)cr[2] : (float)cr[0], fv = d == 2 || d == 3 ? (float)cr[2] : 1.f - (float)cr[1];
+                            uv[i] = {u.x + (u.y - u.x) * fu, v.x + (v.y - v.x) * fv};
+                        }
+                        quadUV(out, p, uv, t, FACE_SHADE[d], ownSky, ownBl);
+                    }
+                    int s = supportDir(b, meta);
+                    glm::vec3 sd((float)DIRS[s][0], 0.f, (float)DIRS[s][2]);
+                    glm::vec3 c0 = base + glm::vec3(0.5f, 0.75f, 0.5f) + sd * (w * 0.5f * k); // край стручка у ствола
+                    glm::vec3 c1 = c0 + sd * (4 * k);
+                    glm::vec3 p[4] = {c0, c1, c1 + glm::vec3(0, 4 * k, 0), c0 + glm::vec3(0, 4 * k, 0)};
+                    glm::vec2 uv[4] = {{12 * k, 4 * k}, {1.f, 4 * k}, {1.f, 0.f}, {12 * k, 0.f}};
+                    quadUV(out, p, uv, t, 0.8f, ownSky, ownBl, glm::vec3(1), true);
+                    continue;
+                }
                 if (shape == Shape::Anvil || shape == Shape::Beacon || shape == Shape::FlowerPot) {
                     const float k = 1.f / 16.f;
                     int edgeMask = 63; // грани на краю блока прячутся за непрозрачным соседом

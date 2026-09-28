@@ -624,6 +624,15 @@ void World::randomTick(const glm::vec3& center, uint32_t& rng, bool precipitatio
                         // Лоза разрастается вниз
                         if ((r >> 24) % 4 == 0 && getBlock(x, y - 1, z) == AIR && m != 0) setBlock(x, y - 1, z, VINE, m);
                         break;
+                    case COCOA: {
+                        // BlockCocoa.updateTick: на стволе джунглей раз в ~5 тиков стручок подрастает (возраст 0..2)
+                        static const int CD[4][2] = {{0, 1}, {-1, 0}, {0, -1}, {1, 0}};
+                        int age = (m >> 2) & 3;
+                        const int* d = CD[m & 3];
+                        if (age < 2 && (r >> 24) % 5 == 0 && getBlock(x + d[0], y, z + d[1]) == LOG && (getMeta(x + d[0], y, z + d[1]) & 3) == 3)
+                            setBlock(x, y, z, COCOA, (uint8_t)((m & 3) | ((age + 1) << 2)));
+                        break;
+                    }
                     case NETHER_WART:
                         if (m < 3 && getBlock(x, y - 1, z) == SOUL_SAND && (r >> 24) % 10 == 0) setBlock(x, y, z, NETHER_WART, (uint8_t)(m + 1));
                         break;

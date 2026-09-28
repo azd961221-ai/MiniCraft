@@ -31,7 +31,7 @@ enum Block : uint8_t {
     EMERALD_ORE, EMERALD_BLOCK, COMMAND_BLOCK, BEACON, ANVIL,
     COBBLE_WALL, FLOWER_POT, CARROTS, POTATOES, WOOD_BUTTON, SKULL_BLOCK, ENDER_CHEST,
     REDSTONE_LAMP_OFF, REDSTONE_LAMP_ON, SANDSTONE_STAIRS, SPRUCE_STAIRS, BIRCH_STAIRS, JUNGLE_STAIRS,
-    WOOD_SLAB, DOUBLE_WOOD_SLAB,
+    WOOD_SLAB, DOUBLE_WOOD_SLAB, COCOA,
     BLOCK_COUNT
 };
 
@@ -82,7 +82,8 @@ enum class Shape : uint8_t {
     Anvil,       // наковальня 1.4.2: четыре коробки (биты 0-1 — поворот, 2-3 — износ)
     Beacon,      // маяк 1.4.2: стеклянная оболочка, обсидиановое основание, ядро
     FlowerPot,   // цветочный горшок 1.4.2
-    Skull        // голова моба 1.4.2: рисуется моделью с текстурой моба (мета — вид), в чанке — ничего
+    Skull,       // голова моба 1.4.2: рисуется моделью с текстурой моба (мета — вид), в чанке — ничего
+    Cocoa        // какао 1.4.2: стручок на стволе (биты 0-1 — сторона ствола, 2-3 — возраст 0..2)
 };
 
 // Какой инструмент ускоряет добычу
@@ -243,6 +244,7 @@ inline const BlockInfo& blockInfo(uint8_t b) {
         /* JUNGLE_STAIRS*/ {"Jungle Wood Stairs", S::Stairs,  true,   2.0f, So::Wood,   T(7, 12), T(7, 12), T(7, 12), 255, Tl::Axe, -1},
         /* WOOD_SLAB    */ {"Wooden Slab",    S::Slab,        true,   2.0f, So::Wood,   T(4, 0), T(4, 0), T(4, 0), 255, Tl::Axe, -1},
         /* DBL_WOOD_SLAB*/ {"Double Wooden Slab", S::Cube,    true,   2.0f, So::Wood,   T(4, 0), T(4, 0), T(4, 0), 255, Tl::Axe, -1},
+        /* COCOA        */ {"Cocoa",          S::Cocoa,       false,  0.2f, So::Wood,   T(8, 10), T(8, 10), T(8, 10), 255, Tl::Axe, -1},
     };
     return INFO[b < BLOCK_COUNT ? b : 0];
 }
@@ -301,7 +303,7 @@ inline bool isRedstoneBlock(uint8_t b) {
 inline bool isItemOnlyBlock(uint8_t b) {
     return b == BED || b == SIGN_POST || b == WALL_SIGN || b == REDSTONE_WIRE || b == REDSTONE_TORCH_OFF || isRepeater(b) ||
            b == PISTON_HEAD || b == BREWING_STAND || b == CAULDRON || b == END_PORTAL || b == CARROTS || b == POTATOES ||
-           b == FLOWER_POT || b == SKULL_BLOCK;
+           b == FLOWER_POT || b == SKULL_BLOCK || b == COCOA;
 }
 // Блок рисуется в инвентаре плоской иконкой, а не кубиком
 inline bool isFlatItem(uint8_t b) {
@@ -444,6 +446,8 @@ inline int blockTex(uint8_t b, int dir, uint8_t meta = 2) {
         default: return (dir == 2 || dir == 3) ? T(6, 0) : T(5, 0);
         }
     }
+    // Какао (BlockCocoa): большой стручок — тайл 168, средний — 169, маленький — 170
+    if (b == COCOA) return T(10 - std::min((meta >> 2) & 3, 2), 10);
     // Деревянные плиты 1.4.2 (BlockWoodSlab): доски своей породы
     if (b == WOOD_SLAB || b == DOUBLE_WOOD_SLAB) return blockTex(PLANKS, dir, (uint8_t)(meta & 3));
     if (b == WOOL && meta != 0) {
@@ -521,6 +525,7 @@ inline int supportDir(uint8_t b, uint8_t meta) {
         return 3;
     case SKULL_BLOCK: // бит 3 — на стене, биты 4-5 — сторона (куда смотрит голова), стена — с обратной стороны
         return (meta & 8) ? (sideToDir((meta >> 4) & 3) ^ 1) : 3;
+    case COCOA: { static const int D[4] = {4, 1, 5, 0}; return D[meta & 3]; } // BlockDirectional: ствол на юге, западе, севере, востоке
     case TRAPDOOR: return sideToDir(meta & 3);
     case WOOD_DOOR: case IRON_DOOR: case CAKE: return 3;
     default: return needsFloor(b) ? 3 : -1;
