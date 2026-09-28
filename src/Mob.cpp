@@ -90,6 +90,7 @@ float blastResistance(uint8_t b) {
     case STONE: case COBBLE: case BRICK: case STONE_BRICK: case MOSSY_COBBLE: return 6.f;
     case PLANKS: return 3.f;
     case COBBLE_STAIRS: case BRICK_STAIRS: case STONEBRICK_STAIRS: case SLAB: case DOUBLE_SLAB: case IRON_BARS: return 6.f;
+    case WOOD_SLAB: case DOUBLE_WOOD_SLAB: return 3.f;
     case IRON_DOOR: return 5.f;
     default: {
         float h = blockInfo(b).hardness;

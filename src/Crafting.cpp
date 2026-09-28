@@ -125,9 +125,11 @@ struct Book {
         shaped(makeStack(MUSHROOM_STEW), S{"Y", "X", "#"}, {{'Y', BROWN_MUSHROOM}, {'X', RED_MUSHROOM}, {'#', BOWL}});
         shaped(makeStack(MUSHROOM_STEW), S{"Y", "X", "#"}, {{'Y', RED_MUSHROOM}, {'X', BROWN_MUSHROOM}, {'#', BOWL}});
 
-        // Полублоки (3 штуки в 1.0) и ступеньки (4 штуки)
-        const uint16_t slabMats[6] = {STONE, SANDSTONE, PLANKS, COBBLE, BRICK, STONE_BRICK};
-        for (int i = 0; i < 6; ++i) shaped(makeStack(SLAB, 3, (uint16_t)i), S{"###"}, {{'#', slabMats[i]}});
+        // Полублоки (6 штук в 1.4.2, в 1.0 было 3) и ступеньки (4 штуки)
+        // (1.4.2: из досок — деревянные плиты своей породы, каменная «деревянная» плита больше не крафтится)
+        const uint16_t slabMats[6] = {STONE, SANDSTONE, 0, COBBLE, BRICK, STONE_BRICK};
+        for (int i = 0; i < 6; ++i) if (slabMats[i]) shaped(makeStack(SLAB, 6, (uint16_t)i), S{"###"}, {{'#', slabMats[i]}});
+        for (int i = 0; i < 4; ++i) shapedI(makeStack(WOOD_SLAB, 6, (uint16_t)i), S{"###"}, {{'#', Ingredient(PLANKS, i)}});
         const std::pair<uint16_t, uint16_t> stairs[] = {{COBBLE, COBBLE_STAIRS}, {BRICK, BRICK_STAIRS}, {STONE_BRICK, STONEBRICK_STAIRS},
                                                         {SANDSTONE, SANDSTONE_STAIRS}};
         for (auto [mat, st] : stairs) shaped(makeStack(st, 4), S{"#  ", "## ", "###"}, {{'#', mat}});
@@ -307,6 +309,8 @@ std::vector<ItemStack> blockDrops(uint8_t block, uint8_t meta, uint32_t& rng) {
     case GLASS_PANE: case FIRE: case CAKE: return {};
     case SLAB: return {makeStack(SLAB, 1, (uint16_t)(meta & 7))};
     case DOUBLE_SLAB: return {makeStack(SLAB, 2, (uint16_t)(meta & 7))};
+    case WOOD_SLAB: return {makeStack(WOOD_SLAB, 1, (uint16_t)(meta & 3))};
+    case DOUBLE_WOOD_SLAB: return {makeStack(WOOD_SLAB, 2, (uint16_t)(meta & 3))};
     case WOOL: return {makeStack(WOOL, 1, (uint16_t)(meta & 15))};
     case WOOD_DOOR: if (meta & 8) return {}; return {makeStack(WOOD_DOOR_ITEM)};
     case IRON_DOOR: if (meta & 8) return {}; return {makeStack(IRON_DOOR_ITEM)};
@@ -413,6 +417,7 @@ int fuelTicks(const ItemStack& f) {
     case COAL: return 1600;
     case LOG: case PLANKS: case CRAFTING_TABLE: case CHEST: case BOOKSHELF: return 300;
     case STICK: case SAPLING: case WOOD_BUTTON: return 100;
+    case WOOD_SLAB: return 150;
     case FENCE: case WOOD_STAIRS: case SPRUCE_STAIRS: case BIRCH_STAIRS: case JUNGLE_STAIRS: case TRAPDOOR: case FENCE_GATE: case NOTE_BLOCK: case JUKEBOX: case WOOD_PLATE: case CARROT_ON_A_STICK: return 300;
     case LAVA_BUCKET: return 20000;
     default: return 0;

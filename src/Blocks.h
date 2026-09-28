@@ -31,6 +31,7 @@ enum Block : uint8_t {
     EMERALD_ORE, EMERALD_BLOCK, COMMAND_BLOCK, BEACON, ANVIL,
     COBBLE_WALL, FLOWER_POT, CARROTS, POTATOES, WOOD_BUTTON, SKULL_BLOCK, ENDER_CHEST,
     REDSTONE_LAMP_OFF, REDSTONE_LAMP_ON, SANDSTONE_STAIRS, SPRUCE_STAIRS, BIRCH_STAIRS, JUNGLE_STAIRS,
+    WOOD_SLAB, DOUBLE_WOOD_SLAB,
     BLOCK_COUNT
 };
 
@@ -240,6 +241,8 @@ inline const BlockInfo& blockInfo(uint8_t b) {
         /* SPRUCE_STAIRS*/ {"Spruce Wood Stairs", S::Stairs,  true,   2.0f, So::Wood,   T(6, 12), T(6, 12), T(6, 12), 255, Tl::Axe, -1},
         /* BIRCH_STAIRS */ {"Birch Wood Stairs", S::Stairs,   true,   2.0f, So::Wood,   T(6, 13), T(6, 13), T(6, 13), 255, Tl::Axe, -1},
         /* JUNGLE_STAIRS*/ {"Jungle Wood Stairs", S::Stairs,  true,   2.0f, So::Wood,   T(7, 12), T(7, 12), T(7, 12), 255, Tl::Axe, -1},
+        /* WOOD_SLAB    */ {"Wooden Slab",    S::Slab,        true,   2.0f, So::Wood,   T(4, 0), T(4, 0), T(4, 0), 255, Tl::Axe, -1},
+        /* DBL_WOOD_SLAB*/ {"Double Wooden Slab", S::Cube,    true,   2.0f, So::Wood,   T(4, 0), T(4, 0), T(4, 0), 255, Tl::Axe, -1},
     };
     return INFO[b < BLOCK_COUNT ? b : 0];
 }
@@ -265,6 +268,10 @@ inline bool isStairs(uint8_t b) {
     return b == WOOD_STAIRS || b == COBBLE_STAIRS || b == BRICK_STAIRS || b == STONEBRICK_STAIRS || b == NETHER_STAIRS ||
            b == SANDSTONE_STAIRS || b == SPRUCE_STAIRS || b == BIRCH_STAIRS || b == JUNGLE_STAIRS;
 }
+inline bool isSlab(uint8_t b) { return b == SLAB || b == WOOD_SLAB; }
+inline bool isDoubleSlab(uint8_t b) { return b == DOUBLE_SLAB || b == DOUBLE_WOOD_SLAB; }
+inline uint8_t doubleSlabOf(uint8_t b) { return b == WOOD_SLAB ? DOUBLE_WOOD_SLAB : DOUBLE_SLAB; }
+inline uint8_t singleSlabOf(uint8_t b) { return b == DOUBLE_WOOD_SLAB ? WOOD_SLAB : SLAB; }
 inline bool isDoor(uint8_t b) { return b == WOOD_DOOR || b == IRON_DOOR; }
 // Сторона 0..3 (+X, +Z, -X, -Z) -> индекс направления (0 +X, 1 -X, 2 +Y, 3 -Y, 4 +Z, 5 -Z)
 inline int sideToDir(int s) { static const int D[4] = {0, 4, 1, 5}; return D[s & 3]; }
@@ -381,6 +388,7 @@ inline void itemModelBoxes(uint8_t b, std::vector<std::pair<glm::vec3, glm::vec3
 // Блок-предмет с вариантами в damage (древесина, шерсть, полублоки)
 inline bool blockHasVariants(uint8_t b) {
     return b == LOG || b == LEAVES || b == SAPLING || b == WOOL || b == SLAB || b == DOUBLE_SLAB || b == STONE_BRICK || b == MONSTER_EGG ||
+           b == WOOD_SLAB || b == DOUBLE_WOOD_SLAB ||
            b == PLANKS || b == SANDSTONE || b == COBBLE_WALL;
 }
 
@@ -436,6 +444,8 @@ inline int blockTex(uint8_t b, int dir, uint8_t meta = 2) {
         default: return (dir == 2 || dir == 3) ? T(6, 0) : T(5, 0);
         }
     }
+    // Деревянные плиты 1.4.2 (BlockWoodSlab): доски своей породы
+    if (b == WOOD_SLAB || b == DOUBLE_WOOD_SLAB) return blockTex(PLANKS, dir, (uint8_t)(meta & 3));
     if (b == WOOL && meta != 0) {
         // BlockCloth.getBlockTextureFromSideAndMetadata
         int j = ~(int)(meta & 15);

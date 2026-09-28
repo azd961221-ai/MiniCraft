@@ -140,7 +140,8 @@ void ContainerScreen::initTabs() {
     for (int d = 0; d < 3; ++d) add(0, SANDSTONE, d);
     for (int d = 0; d < 4; ++d) add(0, PLANKS, d);
     for (int d = 0; d < 4; ++d) add(0, LOG, d);
-    for (int d = 0; d < 6; ++d) add(0, SLAB, d);
+    for (int d = 0; d < 6; ++d) if (d != 2) add(0, SLAB, d); // 1.4.2: «деревянная каменная» плита скрыта
+    for (int d = 0; d < 4; ++d) add(0, WOOD_SLAB, d);
     add(0, WOOD_STAIRS);
     add(0, COBBLE_STAIRS);
     add(0, BRICK_STAIRS);

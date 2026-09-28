@@ -3552,16 +3552,16 @@ int main(int argc, char** argv) {
                     consumeHeld();
                     startSwing();
                 }
-            } else if (held.id == SLAB && hasHit &&
-                       ((target == SLAB && (world->getMeta(hit.x, hit.y, hit.z) & 7) == held.damage &&
+            } else if (held.id < 256 && isSlab((uint8_t)held.id) && hasHit &&
+                       ((target == held.id && (world->getMeta(hit.x, hit.y, hit.z) & 7) == held.damage &&
                          (n.y == ((world->getMeta(hit.x, hit.y, hit.z) & 8) ? -1 : 1))) ||
-                        (world->getBlock(prev.x, prev.y, prev.z) == SLAB && (world->getMeta(prev.x, prev.y, prev.z) & 7) == held.damage))) {
+                        (world->getBlock(prev.x, prev.y, prev.z) == held.id && (world->getMeta(prev.x, prev.y, prev.z) & 7) == held.damage))) {
                 // Второй полублок того же материала к первому (на нижний сверху, под верхний снизу) — двойной
-                bool intoHit = target == SLAB && (world->getMeta(hit.x, hit.y, hit.z) & 7) == held.damage &&
+                bool intoHit = target == held.id && (world->getMeta(hit.x, hit.y, hit.z) & 7) == held.damage &&
                                n.y == ((world->getMeta(hit.x, hit.y, hit.z) & 8) ? -1 : 1);
                 glm::ivec3 p = intoHit ? hit : prev;
-                world->setBlock(p.x, p.y, p.z, DOUBLE_SLAB, (uint8_t)held.damage);
-                audio.playDig(SLAB, glm::vec3(p) + 0.5f);
+                world->setBlock(p.x, p.y, p.z, doubleSlabOf((uint8_t)held.id), (uint8_t)held.damage);
+                audio.playDig((uint8_t)held.id, glm::vec3(p) + 0.5f);
                 consumeHeld();
                 startSwing();
             } else if (tool.type == Tool::Hoe && hasHit && (target == GRASS || target == DIRT) && n.y >= 0 &&
@@ -3619,7 +3619,7 @@ int main(int argc, char** argv) {
                 if (block == LOG || block == SAPLING) meta = (uint8_t)(held.damage & 3);
                 if (block == LEAVES) meta = (uint8_t)((held.damage & 3) | LEAVES_PLAYER);
                 if (block == TALL_GRASS) meta = 1;
-                if (block == WOOL || block == SLAB || block == STONE_BRICK || block == MONSTER_EGG || block == SKULL_BLOCK) meta = (uint8_t)held.damage;
+                if (block == WOOL || isSlab(block) || block == STONE_BRICK || block == MONSTER_EGG || block == SKULL_BLOCK) meta = (uint8_t)held.damage;
                 if (block == PLANKS || block == SANDSTONE) meta = (uint8_t)(held.damage & 3);
                 if (block == ANVIL) {
                     // Длинной стороной поперёк взгляда (BlockAnvil.onBlockPlacedBy); биты 2-3 — износ
@@ -3644,7 +3644,7 @@ int main(int argc, char** argv) {
                 if (isStairs(block)) meta = std::abs(lk.x) > std::abs(lk.z) ? (lk.x > 0 ? 0 : 1) : (lk.z > 0 ? 2 : 3);
                 // Верхняя половина (1.3+): клик по нижней грани или по верхней половине боковой — полублок наверх,
                 // ступени вверх ногами
-                if ((block == SLAB || isStairs(block)) && !isReplaceable(target)) {
+                if ((isSlab(block) || isStairs(block)) && !isReplaceable(target)) {
                     bool upper = n.y == -1;
                     if (n.y == 0) {
                         glm::vec3 eo = player.eye(), ed = player.look();
@@ -3655,7 +3655,7 @@ int main(int argc, char** argv) {
                             upper = fy > 0.5f;
                         }
                     }
-                    if (upper) meta = (uint8_t)(meta | (block == SLAB ? 8 : 4));
+                    if (upper) meta = (uint8_t)(meta | (isSlab(block) ? 8 : 4));
                 }
                 if (block == FENCE_GATE) meta = facing;
                 if (block == LADDER || block == TRAPDOOR) {
@@ -3843,11 +3843,12 @@ int main(int argc, char** argv) {
 
         // Средняя кнопка: выбрать блок (в творческом — взять в руку)
         if (g_in.pickClick && hasHit) {
-            uint16_t want = target == FURNACE_LIT ? FURNACE : target == REEDS ? REEDS_ITEM : target == DOUBLE_SLAB ? SLAB
+            uint16_t want = target == FURNACE_LIT ? FURNACE : target == REEDS ? REEDS_ITEM : isDoubleSlab(target) ? singleSlabOf(target)
                           : target == WOOD_DOOR ? WOOD_DOOR_ITEM : target == IRON_DOOR ? IRON_DOOR_ITEM : target == CAKE ? CAKE_ITEM : target;
             uint8_t tm = world->getMeta(hit.x, hit.y, hit.z);
-            uint16_t variant = (target == LOG || target == LEAVES || target == SAPLING) ? (uint16_t)(tm & 3)
-                             : (target == WOOL) ? (uint16_t)(tm & 15) : (target == SLAB || target == DOUBLE_SLAB) ? (uint16_t)(tm & 7) : 0;
+            uint16_t variant = !blockHasVariants(target) ? 0
+                             : (target == WOOL || target == MONSTER_EGG) ? (uint16_t)(tm & 15)
+                             : (target == SLAB || target == DOUBLE_SLAB) ? (uint16_t)(tm & 7) : (uint16_t)(tm & 3);
             int found = -1;
             for (int i = 0; i < 9; ++i) if (inv.slots[i].id == want && inv.slots[i].damage == variant) found = i;
             if (found >= 0) g_in.selected = found;
@@ -4934,6 +4935,7 @@ int main(int argc, char** argv) {
             S(9, 0, 2, STONE_BRICK, 3); S(9, 0, 4, COBBLE_WALL, 1); S(9, 0, 6, FARMLAND, 7); S(9, 1, 6, CARROTS, 7);
             S(9, 0, 8, FARMLAND, 7); S(9, 1, 8, POTATOES, 3); S(9, 0, 10, COMMAND_BLOCK); S(9, 0, 12, EMERALD_BLOCK);
             S(6, 0, 14, COBBLE); S(6, 1, 14, COBBLE);
+            for (int i = 0; i < 4; ++i) S(3, 1, 1 + i * 2, WOOD_SLAB, (uint8_t)(i | (i & 1 ? 8 : 0))); // деревянные плиты
             S(2, 1, 13, SLAB, 1 | 8); S(2, 1, 14, COBBLE_STAIRS, 0 | 4); S(2, 1, 15, SLAB, 4 | 8); S(2, 0, 15, SLAB, 4); // верх/низ
             if (placeItemFrame(mobMgr.paintings, *world, o + glm::ivec3(6, 0, 14), glm::ivec3(-1, 0, 0)))
                 mobMgr.paintings.back().item = makeStack(DIAMOND_SWORD);

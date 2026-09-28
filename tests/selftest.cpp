@@ -143,7 +143,12 @@ int main(int argc, char** argv) {
         ItemStack g4[9];
         for (int i = 0; i < 3; ++i) g4[3 + i] = makeStack(COBBLE);
         ItemStack sl = findRecipe(g4, 3);
-        CHECK(sl.id == SLAB && sl.damage == 3 && sl.count == 3);
+        CHECK(sl.id == SLAB && sl.damage == 3 && sl.count == 6);
+        for (int i = 0; i < 3; ++i) g4[3 + i] = makeStack(PLANKS, 1, 2);
+        ItemStack ws = findRecipe(g4, 3);
+        CHECK(ws.id == WOOD_SLAB && ws.damage == 2 && ws.count == 6); // берёзовые доски → берёзовые плиты
+        uint32_t r0 = 1;
+        CHECK(blockDrops(DOUBLE_WOOD_SLAB, 3, r0)[0].id == WOOD_SLAB && blockDrops(DOUBLE_WOOD_SLAB, 3, r0)[0].count == 2);
         uint32_t rng = 7;
         CHECK(blockDrops(DOUBLE_SLAB, 1, rng)[0].count == 2);
         CHECK(blockDrops(WOOD_DOOR, 8, rng).empty());

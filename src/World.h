@@ -122,7 +122,7 @@ inline void blockBounds(uint8_t b, uint8_t meta, int x, int z, glm::vec3& mn, gl
     }
     case CACTUS: mn = {0.0625f, 0.f, 0.0625f}; mx = {0.9375f, 1.f, 0.9375f}; break;
     case FENCE: case NETHER_FENCE: mn = {0.375f, 0.f, 0.375f}; mx = {0.625f, 1.f, 0.625f}; break;
-    case SLAB: if (meta & 8) mn.y = 0.5f; else mx.y = 0.5f; break;
+    case SLAB: case WOOD_SLAB: if (meta & 8) mn.y = 0.5f; else mx.y = 0.5f; break;
     case LILY_PAD: mx = {1.f, 1 / 64.f, 1.f}; break;
     case PUMPKIN_STEM: case MELON_STEM: mn = {0.375f, 0.f, 0.375f}; mx = {0.625f, 0.25f, 0.625f}; break;
     case ENCHANT_TABLE: mx = {1.f, 0.75f, 1.f}; break;

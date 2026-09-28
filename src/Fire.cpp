@@ -8,7 +8,7 @@ namespace {
 // chanceToEncourageFire / abilityToCatchFire из 1.0
 int encouragement(uint8_t b) {
     switch (b) {
-    case PLANKS: case FENCE: case WOOD_STAIRS: case SPRUCE_STAIRS: case BIRCH_STAIRS: case JUNGLE_STAIRS: case LOG: return 5;
+    case PLANKS: case FENCE: case WOOD_STAIRS: case SPRUCE_STAIRS: case BIRCH_STAIRS: case JUNGLE_STAIRS: case WOOD_SLAB: case DOUBLE_WOOD_SLAB: case LOG: return 5;
     case LEAVES: case BOOKSHELF: case WOOL: return 30;
     case TNT: return 15;
     case TALL_GRASS: return 60;
@@ -17,7 +17,7 @@ int encouragement(uint8_t b) {
 }
 int flammability(uint8_t b) {
     switch (b) {
-    case PLANKS: case FENCE: case WOOD_STAIRS: case SPRUCE_STAIRS: case BIRCH_STAIRS: case JUNGLE_STAIRS: case BOOKSHELF: return 20;
+    case PLANKS: case FENCE: case WOOD_STAIRS: case SPRUCE_STAIRS: case BIRCH_STAIRS: case JUNGLE_STAIRS: case WOOD_SLAB: case DOUBLE_WOOD_SLAB: case BOOKSHELF: return 20;
     case LOG: return 5;
     case LEAVES: case WOOL: return 60;
     case TNT: case TALL_GRASS: return 100;

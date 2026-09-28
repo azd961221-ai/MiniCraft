@@ -35,7 +35,7 @@ int blockMapColor(uint8_t b) {
     case DIRT: case FARMLAND: return MC_DIRT;
     case WATER: return MC_WATER;
     case LOG: case PLANKS: case BOOKSHELF: case CRAFTING_TABLE: case CHEST: case WOOD_STAIRS: case SPRUCE_STAIRS: case BIRCH_STAIRS:
-    case JUNGLE_STAIRS: case FENCE: case WOOD_DOOR:
+    case JUNGLE_STAIRS: case WOOD_SLAB: case DOUBLE_WOOD_SLAB: case FENCE: case WOOD_DOOR:
     case TRAPDOOR: case FENCE_GATE: case SIGN_POST: case WALL_SIGN: case NOTE_BLOCK: case JUKEBOX: case WOOD_PLATE:
         return MC_WOOD;
     default: return isSolid(b) ? MC_STONE : MC_AIR;

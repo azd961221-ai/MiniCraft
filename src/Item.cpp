@@ -242,6 +242,10 @@ const char* itemName(const ItemStack& s) {
         static const char* N[6] = {"Stone Slab", "Sandstone Slab", "Wooden Slab", "Cobblestone Slab", "Brick Slab", "Stone Brick Slab"};
         return N[s.damage % 6];
     }
+    if (s.id == WOOD_SLAB) {
+        static const char* N[4] = {"Oak Wood Slab", "Spruce Wood Slab", "Birch Wood Slab", "Jungle Wood Slab"};
+        return N[s.damage & 3];
+    }
     if (s.id == WOOL) {
         // ItemCloth 1.0: название по цвету (мета шерсти = 15 - номер красителя)
         static const char* N[16] = {"White Wool", "Orange Wool", "Magenta Wool", "Light Blue Wool", "Yellow Wool", "Lime Wool",
