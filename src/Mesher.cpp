@@ -845,7 +845,8 @@ void World::buildMesh(Chunk& c) {
                     };
                     const glm::vec3 white(1.f);
                     if (shape == Shape::Slab) {
-                        box(mesh[MESH_SOLID], {0, 0, 0}, {1, 0.5f, 1}, 63, nullptr);
+                        if (meta & 8) box(mesh[MESH_SOLID], {0, 0.5f, 0}, {1, 1, 1}, 63, nullptr); // верхняя (1.3+)
+                        else box(mesh[MESH_SOLID], {0, 0, 0}, {1, 0.5f, 1}, 63, nullptr);
                     } else if (shape == Shape::Stairs) {
                         bool upsideDown = (meta & 4) != 0;
                         float yBase0 = upsideDown ? 0.5f : 0.0f, yBase1 = upsideDown ? 1.0f : 0.5f;

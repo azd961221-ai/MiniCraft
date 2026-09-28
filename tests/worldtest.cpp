@@ -6,6 +6,7 @@
 #include <cstring>
 #include "../src/Map.h"
 #include "../src/Mob.h"
+#include "../src/Physics.h"
 #include "../src/Saves.h"
 #include "../src/World.h"
 
@@ -81,6 +82,19 @@ int main(int argc, char** argv) {
         CHECK(w.getBlock(2, Y + 1, 31) == REDSTONE_LAMP_ON);
         runTicks(w, t, 6);
         CHECK(w.getBlock(2, Y + 1, 31) == REDSTONE_LAMP_OFF);
+    }
+
+    // --- Верхний полублок (бит 3) и ступени вверх ногами (бит 2) — коллизия в верхней половине
+    {
+        platform(w, 6, 30, 8, 32, Y);
+        w.setBlock(7, Y + 1, 31, SLAB, 3 | 8);
+        std::vector<AABB> bx;
+        blockCollision(w, 7, Y + 1, 31, bx);
+        CHECK(bx.size() == 1 && bx[0].mn.y == Y + 1.5f && bx[0].mx.y == Y + 2.f);
+        w.setBlock(7, Y + 1, 31, COBBLE_STAIRS, 0 | 4);
+        bx.clear();
+        blockCollision(w, 7, Y + 1, 31, bx);
+        CHECK(bx.size() == 2 && bx[0].mn.y == Y + 1.5f);
     }
 
     // --- Грядка: прыжок вытаптывает, посев срывается с метой

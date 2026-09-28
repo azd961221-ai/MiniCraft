@@ -48,7 +48,7 @@ static void localBoxes(const World& w, uint8_t b, uint8_t meta, int x, int y, in
     const float k = 1.f / 16.f;
     const Shape s0 = blockShape(b);
     switch (s0) {
-    case Shape::Slab: out.push_back({{0, 0, 0}, {1, 0.5f, 1}}); return;
+    case Shape::Slab: out.push_back((meta & 8) ? AABB{{0, 0.5f, 0}, {1, 1, 1}} : AABB{{0, 0, 0}, {1, 0.5f, 1}}); return; // бит 3 — верхняя
     case Shape::Bed: out.push_back({{0, 0, 0}, {1, 9 * k, 1}}); return;
     case Shape::Table: out.push_back({{0, 0, 0}, {1, 0.75f, 1}}); return;
     case Shape::LilyPad: out.push_back({{0, 0, 0}, {1, 1.f / 64.f, 1}}); return;

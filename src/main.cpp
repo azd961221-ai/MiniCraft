@@ -3553,10 +3553,13 @@ int main(int argc, char** argv) {
                     startSwing();
                 }
             } else if (held.id == SLAB && hasHit &&
-                       ((target == SLAB && n.y == 1 && (world->getMeta(hit.x, hit.y, hit.z) & 7) == held.damage) ||
+                       ((target == SLAB && (world->getMeta(hit.x, hit.y, hit.z) & 7) == held.damage &&
+                         (n.y == ((world->getMeta(hit.x, hit.y, hit.z) & 8) ? -1 : 1))) ||
                         (world->getBlock(prev.x, prev.y, prev.z) == SLAB && (world->getMeta(prev.x, prev.y, prev.z) & 7) == held.damage))) {
-                // Второй полублок того же материала сверху — двойной
-                glm::ivec3 p = (target == SLAB && n.y == 1 && (world->getMeta(hit.x, hit.y, hit.z) & 7) == held.damage) ? hit : prev;
+                // Второй полублок того же материала к первому (на нижний сверху, под верхний снизу) — двойной
+                bool intoHit = target == SLAB && (world->getMeta(hit.x, hit.y, hit.z) & 7) == held.damage &&
+                               n.y == ((world->getMeta(hit.x, hit.y, hit.z) & 8) ? -1 : 1);
+                glm::ivec3 p = intoHit ? hit : prev;
                 world->setBlock(p.x, p.y, p.z, DOUBLE_SLAB, (uint8_t)held.damage);
                 audio.playDig(SLAB, glm::vec3(p) + 0.5f);
                 consumeHeld();
@@ -3639,6 +3642,21 @@ int main(int argc, char** argv) {
                 glm::vec3 lk = player.look();
                 uint8_t facing = std::abs(lk.x) > std::abs(lk.z) ? (lk.x > 0 ? 0 : 2) : (lk.z > 0 ? 1 : 3); // +X, +Z, -X, -Z
                 if (isStairs(block)) meta = std::abs(lk.x) > std::abs(lk.z) ? (lk.x > 0 ? 0 : 1) : (lk.z > 0 ? 2 : 3);
+                // Верхняя половина (1.3+): клик по нижней грани или по верхней половине боковой — полублок наверх,
+                // ступени вверх ногами
+                if ((block == SLAB || isStairs(block)) && !isReplaceable(target)) {
+                    bool upper = n.y == -1;
+                    if (n.y == 0) {
+                        glm::vec3 eo = player.eye(), ed = player.look();
+                        int ax = n.x != 0 ? 0 : 2;
+                        float plane = (float)hit[ax] + (n[ax] > 0 ? 1.f : 0.f);
+                        if (std::abs(ed[ax]) > 1e-6f) {
+                            float fy = eo.y + ed.y * ((plane - eo[ax]) / ed[ax]) - (float)hit.y;
+                            upper = fy > 0.5f;
+                        }
+                    }
+                    if (upper) meta = (uint8_t)(meta | (block == SLAB ? 8 : 4));
+                }
                 if (block == FENCE_GATE) meta = facing;
                 if (block == LADDER || block == TRAPDOOR) {
                     // Только на боковую грань непрозрачного блока; мета — сторона стены
@@ -4916,6 +4934,7 @@ int main(int argc, char** argv) {
             S(9, 0, 2, STONE_BRICK, 3); S(9, 0, 4, COBBLE_WALL, 1); S(9, 0, 6, FARMLAND, 7); S(9, 1, 6, CARROTS, 7);
             S(9, 0, 8, FARMLAND, 7); S(9, 1, 8, POTATOES, 3); S(9, 0, 10, COMMAND_BLOCK); S(9, 0, 12, EMERALD_BLOCK);
             S(6, 0, 14, COBBLE); S(6, 1, 14, COBBLE);
+            S(2, 1, 13, SLAB, 1 | 8); S(2, 1, 14, COBBLE_STAIRS, 0 | 4); S(2, 1, 15, SLAB, 4 | 8); S(2, 0, 15, SLAB, 4); // верх/низ
             if (placeItemFrame(mobMgr.paintings, *world, o + glm::ivec3(6, 0, 14), glm::ivec3(-1, 0, 0)))
                 mobMgr.paintings.back().item = makeStack(DIAMOND_SWORD);
             if (placeItemFrame(mobMgr.paintings, *world, o + glm::ivec3(6, 0, 14), glm::ivec3(0, 0, -1))) {
