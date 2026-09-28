@@ -41,6 +41,10 @@ struct Painting {
     int dir = 0;        // куда смотрит: 0 — -Z, 1 — -X, 2 — +Z, 3 — +X (direction в 1.0)
     int art = 0;
     bool dead = false;
+    // Рамка для предмета (EntityItemFrame 1.4.2): висит так же, 12x12 пикселей, держит предмет с поворотом 0..3
+    bool frame = false;
+    ItemStack item;
+    int rotation = 0;
     glm::vec3 normal() const;
     glm::vec3 right() const;  // «вправо» для того, кто смотрит на картину
     glm::vec3 center() const; // середина (в 1/16 перед стеной)
@@ -50,6 +54,8 @@ struct Painting {
 bool paintingFits(const Painting& p, const World& w, const std::vector<Painting>& others);
 // Повесить на грань face (нормаль, только стены) блока wall: случайный из подходящих по месту сюжетов
 bool placePainting(std::vector<Painting>& ps, const World& w, const glm::ivec3& wall, const glm::ivec3& face, uint32_t& rng);
+// Повесить рамку для предмета на грань face блока wall
+bool placeItemFrame(std::vector<Painting>& ps, const World& w, const glm::ivec3& wall, const glm::ivec3& face);
 
 // Предмет, выпавший из блока: случайное смещение внутри блока и небольшой подброс
 void dropFromBlock(std::vector<ItemEntity>& items, const glm::ivec3& block, const ItemStack& stack, uint32_t& rng);

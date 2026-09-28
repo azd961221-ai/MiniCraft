@@ -581,6 +581,8 @@ int main() {
         for (auto& pt : dm.mobs.paintings) {
             if (pt.dead || !inRange(pt.center())) continue;
             w.u32(pt.id); w.i32(pt.wall.x); w.u8((uint8_t)pt.wall.y); w.i32(pt.wall.z); w.u8((uint8_t)pt.dir); w.u8((uint8_t)pt.art);
+            w.u8(pt.frame ? 1 : 0);
+            if (pt.frame) { w.u8((uint8_t)pt.rotation); writeItem(w, pt.item); }
         }
         // Падающий песок и гравий
         n = 0;
@@ -989,13 +991,36 @@ int main() {
                         glm::ivec3 face((int8_t)r.u8(), 0, (int8_t)r.u8());
                         if (r.ok && std::abs(face.x) + std::abs(face.z) == 1 && glm::length(glm::vec3(wp) - glm::vec3(c.st.x, c.st.y, c.st.z)) < 8.f)
                             placePainting(dmp->mobs.paintings, *dmp->world, wp, face, rng);
+                    } else if (op == 2) {
+                        // Рамка для предмета (1.4.2)
+                        glm::ivec3 wp; wp.x = r.i32(); wp.y = r.u8(); wp.z = r.i32();
+                        glm::ivec3 face((int8_t)r.u8(), 0, (int8_t)r.u8());
+                        if (r.ok && glm::length(glm::vec3(wp) - glm::vec3(c.st.x, c.st.y, c.st.z)) < 8.f)
+                            placeItemFrame(dmp->mobs.paintings, *dmp->world, wp, face);
+                    } else if (op == 3) {
+                        // ПКМ по рамке: пустая — предмет из руки, с предметом — поворот
+                        uint32_t pid = r.u32();
+                        ItemStack held = readItem(r);
+                        for (auto& pt : dmp->mobs.paintings)
+                            if (r.ok && pt.id == pid && pt.frame && !pt.dead) {
+                                if (pt.item.empty() && !held.empty() && isValidItem(held.id)) { pt.item = held; pt.item.count = 1; pt.rotation = 0; }
+                                else if (!pt.item.empty()) pt.rotation = (pt.rotation + 1) & 3;
+                            }
                     } else {
                         uint32_t pid = r.u32();
+                        bool creative = (c.st.flags & 16) != 0;
                         for (auto& pt : dmp->mobs.paintings)
                             if (pt.id == pid && !pt.dead) {
-                                pt.dead = true;
                                 glm::vec3 pc = pt.center();
-                                dropFromBlock(dmp->items, glm::ivec3((int)std::floor(pc.x), (int)std::floor(pc.y), (int)std::floor(pc.z)), makeStack(PAINTING), rng);
+                                glm::ivec3 cb((int)std::floor(pc.x), (int)std::floor(pc.y), (int)std::floor(pc.z));
+                                if (pt.frame && !pt.item.empty()) { // сначала выпадает предмет из рамки
+                                    if (!creative) dropFromBlock(dmp->items, cb, pt.item, rng);
+                                    pt.item.clear();
+                                    pt.rotation = 0;
+                                    continue;
+                                }
+                                pt.dead = true;
+                                if (!pt.frame || !creative) dropFromBlock(dmp->items, cb, makeStack(pt.frame ? ITEM_FRAME_ITEM : PAINTING), rng);
                             }
                         dmp->mobs.paintings.erase(std::remove_if(dmp->mobs.paintings.begin(), dmp->mobs.paintings.end(),
                                                                  [](const Painting& q) { return q.dead; }), dmp->mobs.paintings.end());

@@ -2,7 +2,7 @@
 // Протокол MiniCraft: номера пакетов и общие структуры клиента и сервера.
 #include <cstdint>
 
-constexpr uint16_t PROTOCOL_VERSION = 5; // 3: исправлен порядок чтения координат (X и Z менялись местами)
+constexpr uint16_t PROTOCOL_VERSION = 6; // 3: исправлен порядок чтения координат; 6: рамки для предметов (C_PAINTING 2/3)
 constexpr int DEFAULT_PORT = 25565;
 
 enum PacketType : uint16_t {
@@ -31,7 +31,8 @@ enum PacketType : uint16_t {
     C_DIM = 22,           // i8 измерение — перешёл через портал / возродился
     C_SAVE = 23,          // blob — сохранение игрока
     C_SLEEP = 24,         // u8 спит ли
-    C_PAINTING = 26,      // u8 0: i32 x, u8 y, i32 z, i8 fx, i8 fz — повесить на грань; u8 1: u32 картина — сломать
+    C_PAINTING = 26,      // u8 0: i32 x, u8 y, i32 z, i8 fx, i8 fz — повесить на грань; u8 1: u32 картина — сломать;
+                          // u8 2: как 0, но рамка для предмета; u8 3: u32 рамка, ItemNet в руке — вставить/повернуть
     C_KEEPALIVE = 25,     // u32 — ответ на S_KEEPALIVE (сервер меряет пинг)
 
     // ---- Сервер -> клиент

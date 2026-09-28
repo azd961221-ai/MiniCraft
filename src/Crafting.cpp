@@ -364,7 +364,12 @@ std::vector<ItemStack> blockDrops(uint8_t block, uint8_t meta, uint32_t& rng) {
     }
     case EMERALD_ORE: return {makeStack(EMERALD)};
     case COBBLE_WALL: return {makeStack(COBBLE_WALL, 1, (uint16_t)(meta & 1))};
-    case FLOWER_POT: return {makeStack(FLOWER_POT_ITEM)};
+    case FLOWER_POT: {
+        std::vector<ItemStack> d{makeStack(FLOWER_POT_ITEM)};
+        uint8_t pb, pm;
+        if (flowerPotPlant(meta, pb, pm)) d.push_back(makeStack(pb, 1, pm));
+        return d;
+    }
     case SKULL_BLOCK: return {makeStack(SKULL_ITEM, 1, (uint16_t)(meta & 7))};
     case ENDER_CHEST: return {makeStack(OBSIDIAN, 8)};
     case COMMAND_BLOCK: return {};

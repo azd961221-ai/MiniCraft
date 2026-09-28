@@ -739,7 +739,9 @@ void MobManager::checkPaintings(World& w, std::vector<ItemEntity>& items, uint32
         if (!pt.dead && w.isChunkLoaded(floorDiv(pt.wall.x, CW), floorDiv(pt.wall.z, CW)) && !paintingFits(pt, w, paintings)) {
             pt.dead = true;
             glm::vec3 c = pt.center();
-            dropFromBlock(items, glm::ivec3((int)std::floor(c.x), (int)std::floor(c.y), (int)std::floor(c.z)), makeStack(PAINTING), rng);
+            glm::ivec3 cb((int)std::floor(c.x), (int)std::floor(c.y), (int)std::floor(c.z));
+            dropFromBlock(items, cb, makeStack(pt.frame ? ITEM_FRAME_ITEM : PAINTING), rng);
+            if (pt.frame && !pt.item.empty()) dropFromBlock(items, cb, pt.item, rng);
         }
     paintings.erase(std::remove_if(paintings.begin(), paintings.end(), [](const Painting& q) { return q.dead; }), paintings.end());
 }
@@ -2535,12 +2537,23 @@ bool MobManager::save(const std::string& path, const Player& p, const std::vecto
     const uint32_t PT = 0x31305450; // "PT01": картины
     std::fwrite(&PT, 4, 1, f);
     uint32_t np = 0;
-    for (auto& pt : paintings) np += !pt.dead;
+    for (auto& pt : paintings) np += !pt.dead && !pt.frame;
     std::fwrite(&np, 4, 1, f);
     for (auto& pt : paintings) {
-        if (pt.dead) continue;
+        if (pt.dead || pt.frame) continue;
         int32_t v[5] = {pt.wall.x, pt.wall.y, pt.wall.z, pt.dir, pt.art};
         std::fwrite(v, 4, 5, f);
+    }
+    const uint32_t IF = 0x31304649; // "IF01": рамки для предметов (1.4.2) — стена, сторона, поворот, предмет
+    std::fwrite(&IF, 4, 1, f);
+    uint32_t nf = 0;
+    for (auto& pt : paintings) nf += !pt.dead && pt.frame;
+    std::fwrite(&nf, 4, 1, f);
+    for (auto& pt : paintings) {
+        if (pt.dead || !pt.frame) continue;
+        int32_t v[5] = {pt.wall.x, pt.wall.y, pt.wall.z, pt.dir, pt.rotation};
+        std::fwrite(v, 4, 5, f);
+        std::fwrite(&pt.item, sizeof(ItemStack), 1, f);
     }
     bool ok = !std::ferror(f);
     ok = std::fclose(f) == 0 && ok;
@@ -2638,6 +2651,19 @@ bool MobManager::loadFrom(const std::string& path, Player& p, std::vector<ItemEn
                         q.wall = glm::ivec3(v[0], v[1], v[2]);
                         q.dir = v[3] & 3;
                         q.art = std::clamp(v[4], 0, PAINTING_ART_COUNT - 1);
+                        paintings.push_back(q);
+                    }
+                uint32_t fr = 0, nf = 0;
+                if (std::fread(&fr, 4, 1, f) == 1 && fr == 0x31304649 && std::fread(&nf, 4, 1, f) == 1)
+                    for (uint32_t i = 0; i < nf && i < 100000; ++i) {
+                        int32_t v[5];
+                        Painting q;
+                        if (std::fread(v, 4, 5, f) != 5 || std::fread(&q.item, sizeof(ItemStack), 1, f) != 1) break;
+                        q.frame = true;
+                        q.wall = glm::ivec3(v[0], v[1], v[2]);
+                        q.dir = v[3] & 3;
+                        q.rotation = v[4] & 3;
+                        if (q.item.empty() || !isValidItem(q.item.id)) q.item.clear();
                         paintings.push_back(q);
                     }
             }

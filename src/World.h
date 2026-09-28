@@ -169,7 +169,20 @@ inline void blockBounds(uint8_t b, uint8_t meta, int x, int z, glm::vec3& mn, gl
         else { mn.z = 0.125f; mx.z = 0.875f; }
         break;
     case FLOWER_POT: mn = {5 / 16.f, 0.f, 5 / 16.f}; mx = {11 / 16.f, 6 / 16.f, 11 / 16.f}; break;
-    case SKULL_BLOCK: mn = {0.25f, 0.f, 0.25f}; mx = {0.75f, 0.5f, 0.75f}; break;
+    case SKULL_BLOCK:
+        if (meta & 8) {
+            // На стене: полблока от стены, по высоте 0.25..0.75 (BlockSkull.setBlockBoundsBasedOnState)
+            mn = {0.25f, 0.25f, 0.25f}; mx = {0.75f, 0.75f, 0.75f};
+            switch ((meta >> 4) & 3) {
+            case 0: mn.x = 0.f; mx.x = 0.5f; break; // смотрит в +X, стена с -X
+            case 1: mn.z = 0.f; mx.z = 0.5f; break;
+            case 2: mn.x = 0.5f; mx.x = 1.f; break;
+            default: mn.z = 0.5f; mx.z = 1.f; break;
+            }
+        } else {
+            mn = {0.25f, 0.f, 0.25f}; mx = {0.75f, 0.5f, 0.75f};
+        }
+        break;
     default: break;
     }
     if (hasPlantOffset(b)) {

@@ -270,6 +270,37 @@ int main(int argc, char** argv) {
         CHECK(dropped);
     }
 
+    // --- Рамки для предметов (1.4.2): только на стену, предмет и поворот сохраняются, без стены падают вместе с предметом
+    {
+        platform(w, -20, -32, -16, -28, Y);
+        w.setBlock(-18, Y + 2, -32, STONE);
+        MobManager mm;
+        CHECK(!placeItemFrame(mm.paintings, w, glm::ivec3(-18, Y + 2, -32), glm::ivec3(0, 1, 0)));
+        CHECK(!placeItemFrame(mm.paintings, w, glm::ivec3(-18, Y + 3, -32), glm::ivec3(0, 0, 1))); // в воздухе
+        CHECK(placeItemFrame(mm.paintings, w, glm::ivec3(-18, Y + 2, -32), glm::ivec3(0, 0, 1)));
+        CHECK(!placeItemFrame(mm.paintings, w, glm::ivec3(-18, Y + 2, -32), glm::ivec3(0, 0, 1))); // место занято
+        if (mm.paintings.empty()) return 1;
+        mm.paintings[0].item = makeStack(DIAMOND_SWORD);
+        mm.paintings[0].rotation = 3;
+        std::string dir = tmp + "frames/";
+        std::filesystem::create_directories(std::filesystem::u8path(dir));
+        Player p;
+        p.pos = glm::vec3(-18, Y + 1, -30);
+        CHECK(mm.save(dir + "entities.sav", p, nullptr));
+        MobManager m2;
+        std::vector<ItemEntity> its;
+        CHECK(m2.load(dir + "entities.sav", p, &its));
+        CHECK(m2.paintings.size() == 1 && m2.paintings[0].frame && m2.paintings[0].item.id == DIAMOND_SWORD &&
+              m2.paintings[0].rotation == 3 && m2.paintings[0].dir == 2);
+        uint32_t rng = 9;
+        w.setBlock(-18, Y + 2, -32, AIR);
+        m2.checkPaintings(w, its, rng);
+        CHECK(m2.paintings.empty());
+        bool frameDrop = false, swordDrop = false;
+        for (auto& e : its) { frameDrop |= e.stack.id == ITEM_FRAME_ITEM; swordDrop |= e.stack.id == DIAMOND_SWORD; }
+        CHECK(frameDrop && swordDrop);
+    }
+
     // --- Карта: рисуется вокруг игрока, вода синяя, сохраняется
     {
         MapData md;

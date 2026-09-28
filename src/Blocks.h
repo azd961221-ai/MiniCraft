@@ -496,12 +496,34 @@ inline int supportDir(uint8_t b, uint8_t meta) {
     case LEVER: case STONE_BUTTON: case WOOD_BUTTON:
         return (meta & 7) == 5 ? 3 : supportDir(TORCH, meta & 7);
     case BED: case SIGN_POST: case REDSTONE_WIRE: case STONE_PLATE: case WOOD_PLATE: case REPEATER_ON: case REPEATER_OFF:
-    case FLOWER_POT: case SKULL_BLOCK:
+    case FLOWER_POT:
         return 3;
+    case SKULL_BLOCK: // бит 3 — на стене, биты 4-5 — сторона (куда смотрит голова), стена — с обратной стороны
+        return (meta & 8) ? (sideToDir((meta >> 4) & 3) ^ 1) : 3;
     case TRAPDOOR: return sideToDir(meta & 3);
     case WOOD_DOOR: case IRON_DOOR: case CAKE: return 3;
     default: return needsFloor(b) ? 3 : -1;
     }
+}
+
+// Цветочный горшок 1.4.2 (BlockFlowerPot): мета 1..11 — что в нём растёт
+inline bool flowerPotPlant(uint8_t potMeta, uint8_t& b, uint8_t& m) {
+    static const uint8_t P[12][2] = {{AIR, 0},     {ROSE, 0},         {DANDELION, 0},    {SAPLING, 0},
+                                     {SAPLING, 1}, {SAPLING, 2},      {SAPLING, 3},      {RED_MUSHROOM, 0},
+                                     {BROWN_MUSHROOM, 0}, {CACTUS, 0}, {DEAD_BUSH, 0},    {TALL_GRASS, 2}};
+    if (potMeta == 0 || potMeta >= 12) return false;
+    b = P[potMeta][0];
+    m = P[potMeta][1];
+    return true;
+}
+// Мета горшка для растения (0 — в горшок не сажается)
+inline uint8_t flowerPotMetaFor(uint8_t b, uint8_t m) {
+    for (uint8_t i = 1; i < 12; ++i) {
+        uint8_t pb, pm;
+        flowerPotPlant(i, pb, pm);
+        if (pb == b && (b != SAPLING && b != TALL_GRASS ? true : (m & 3) == pm)) return i;
+    }
+    return 0;
 }
 
 // Подкраска грани по биому: 0 — нет, 1 — цвет травы, 2 — цвет листвы, 3 — ель, 4 — берёза

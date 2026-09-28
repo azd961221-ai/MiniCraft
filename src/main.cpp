@@ -1901,7 +1901,7 @@ int main(int argc, char** argv) {
             --showcaseHold;
             const char* sy = std::getenv("MC_SHOW_YAW");
             player.yaw = sy ? (float)std::atof(sy) : 0.f;
-            player.pitch = -35.f;
+            { const char* sp = std::getenv("MC_SHOW_PITCH"); player.pitch = sp ? (float)std::atof(sp) : -35.f; }
         }
 
         // Сон: 100 тиков — и наступает утро, погода проясняется (как в 1.0)
@@ -2570,8 +2570,8 @@ int main(int argc, char** argv) {
         bool rmb = playing && glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
         if (!lmb) g_in.ignoreLmb = false;
 
-        // Картина под прицелом: удар снимает её со стены (выпадает предметом, как в 1.0 — и в творческом)
-        if (g_in.attackClick && !mobMgr.paintings.empty()) {
+        // Картина или рамка под прицелом (ближе блока): индекс в mobMgr.paintings или -1
+        auto paintingUnderCursor = [&]() -> int {
             int best = -1;
             float bt = reach;
             glm::vec3 o = player.eye(), d = player.look();
@@ -2591,15 +2591,28 @@ int main(int argc, char** argv) {
                 if (okr && t0 < bt) { bt = t0; best = (int)pi; }
             }
             float blockDist = hasHit ? glm::length(glm::vec3(hit) + 0.5f - player.eye()) : 1e9f;
-            if (best >= 0 && bt <= blockDist) {
+            return best >= 0 && bt <= blockDist ? best : -1;
+        };
+        // Удар снимает картину со стены (выпадает предметом, как в 1.0 — и в творческом);
+        // у рамки сначала выпадает предмет из неё, потом сама рамка (EntityItemFrame 1.4.2)
+        if (g_in.attackClick && !mobMgr.paintings.empty()) {
+            int best = paintingUnderCursor();
+            if (best >= 0) {
                 Painting& pt = mobMgr.paintings[best];
                 if (mp) {
                     net::Writer w; w.u8(1); w.u32(pt.id);
                     netConn.send(C_PAINTING, w);
                 } else {
                     glm::vec3 pc = pt.center();
-                    dropFromBlock(items, glm::ivec3((int)std::floor(pc.x), (int)std::floor(pc.y), (int)std::floor(pc.z)), makeStack(PAINTING), gameRng);
-                    mobMgr.paintings.erase(mobMgr.paintings.begin() + best);
+                    glm::ivec3 cb((int)std::floor(pc.x), (int)std::floor(pc.y), (int)std::floor(pc.z));
+                    if (pt.frame && !pt.item.empty()) {
+                        if (!player.creative()) dropFromBlock(items, cb, pt.item, gameRng);
+                        pt.item.clear();
+                        pt.rotation = 0;
+                    } else {
+                        if (!pt.frame || !player.creative()) dropFromBlock(items, cb, makeStack(pt.frame ? ITEM_FRAME_ITEM : PAINTING), gameRng);
+                        mobMgr.paintings.erase(mobMgr.paintings.begin() + best);
+                    }
                 }
                 startSwing();
                 g_in.attackClick = false;
@@ -2719,6 +2732,43 @@ int main(int argc, char** argv) {
             g_in.placeClick = false;
         }
 
+        // ПКМ по рамке: пустая — вставить предмет из руки, с предметом — повернуть его на 90°
+        if (g_in.placeClick && !mobMgr.paintings.empty()) {
+            int fi = paintingUnderCursor();
+            if (fi >= 0 && mobMgr.paintings[fi].frame) {
+                Painting& fr = mobMgr.paintings[fi];
+                if (mp) {
+                    net::Writer w; w.u8(3); w.u32(fr.id); writeItem(w, held);
+                    netConn.send(C_PAINTING, w);
+                    if (fr.item.empty() && !held.empty() && !player.creative()) consumeHeld();
+                } else if (fr.item.empty() && !held.empty()) {
+                    fr.item = held;
+                    fr.item.count = 1;
+                    fr.rotation = 0;
+                    if (!player.creative()) consumeHeld();
+                } else if (!fr.item.empty()) {
+                    fr.rotation = (fr.rotation + 1) & 3;
+                }
+                startSwing();
+                g_in.placeClick = false;
+            }
+        }
+        if (g_in.placeClick && held.id == ITEM_FRAME_ITEM && hasHit) {
+            glm::ivec3 face = prev - hit;
+            if (face.y == 0 && std::abs(face.x) + std::abs(face.z) == 1) {
+                std::vector<Painting> probe = mobMgr.paintings;
+                if (mp && placeItemFrame(probe, *world, hit, face)) {
+                    net::Writer w; w.u8(2); w.i32(hit.x); w.u8((uint8_t)hit.y); w.i32(hit.z); w.u8((uint8_t)(int8_t)face.x); w.u8((uint8_t)(int8_t)face.z);
+                    netConn.send(C_PAINTING, w);
+                    if (!player.creative()) consumeHeld();
+                } else if (!mp && placeItemFrame(mobMgr.paintings, *world, hit, face)) {
+                    mobMgr.paintings.back().id = mobMgr.nextId++;
+                    if (!player.creative()) consumeHeld();
+                }
+                startSwing();
+            }
+            g_in.placeClick = false;
+        }
         if (g_in.placeClick && held.id == PAINTING && hasHit) {
             glm::ivec3 face = prev - hit;
             if (face.y == 0 && std::abs(face.x) + std::abs(face.z) == 1) {
@@ -3388,6 +3438,12 @@ int main(int argc, char** argv) {
                 consumeHeld();
                 for (int i = 0; i < 12; ++i) spawnSmoke(particles, glm::vec3(hit) + glm::vec3(rnd(), 1.f, rnd()), false);
                 if (world->tryOpenEndPortal(hit.x, hit.y, hit.z)) audio.play("portal/trigger", 1.f, 1.2f);
+            } else if (hasHit && g_in.placeClick && target == FLOWER_POT && world->getMeta(hit.x, hit.y, hit.z) == 0 &&
+                       isBlockItem(held.id) && flowerPotMetaFor((uint8_t)held.id, (uint8_t)held.damage) != 0) {
+                // Посадить растение в пустой горшок (BlockFlowerPot.onBlockActivated)
+                world->setBlock(hit.x, hit.y, hit.z, FLOWER_POT, flowerPotMetaFor((uint8_t)held.id, (uint8_t)held.damage));
+                if (!player.creative()) consumeHeld();
+                startSwing();
             } else if (hasHit && g_in.placeClick && target == CAKE) {
                 // Кусок торта: 2 единицы сытости (BlockCake.eatCakeSlice)
                 if (player.food < 20) {
@@ -3525,8 +3581,16 @@ int main(int argc, char** argv) {
                     meta = (uint8_t)((std::abs(lk0.x) > std::abs(lk0.z) ? 0 : 1) | ((held.damage & 3) << 2));
                 }
                 if (block == SKULL_BLOCK) {
-                    int rot = (int)std::floor((player.yaw + 180.f) / 22.5f + 0.5f) & 15; // лицом к игроку
-                    meta = (uint8_t)((held.damage & 7) | (rot << 4));
+                    if (n.y == 0 && p == prev) {
+                        // На стене (ItemSkull 1.4.2): бит 3, биты 4-5 — куда смотрит голова (от стены)
+                        int side = n.x == 1 ? 0 : n.z == 1 ? 1 : n.x == -1 ? 2 : 3;
+                        meta = (uint8_t)((held.damage & 7) | 8 | (side << 4));
+                        ok = ok && isSolid(target);
+                    } else {
+                        int rot = (int)std::floor((player.yaw + 180.f) / 22.5f + 0.5f) & 15; // лицом к игроку
+                        meta = (uint8_t)((held.damage & 7) | (rot << 4));
+                        ok = ok && n.y != -1 && isSolid(below); // на потолок в 1.4.2 не ставится
+                    }
                 }
                 if (block == COBBLE_WALL) meta = (uint8_t)(held.damage & 1);
                 glm::vec3 lk = player.look();
@@ -4378,6 +4442,8 @@ int main(int argc, char** argv) {
             pt.wall.x = r.i32(); pt.wall.y = r.u8(); pt.wall.z = r.i32();
             pt.dir = r.u8() & 3;
             pt.art = std::min<int>(r.u8(), PAINTING_ART_COUNT - 1);
+            pt.frame = r.u8() != 0;
+            if (pt.frame) { pt.rotation = r.u8() & 3; pt.item = readItem(r); }
             mobMgr.paintings.push_back(pt);
         }
         // Падающий песок и гравий
@@ -4799,6 +4865,14 @@ int main(int argc, char** argv) {
             for (int d = 0; d < 3; ++d) S(7, 0, 10 + d * 2, SANDSTONE, (uint8_t)d);
             S(9, 0, 2, STONE_BRICK, 3); S(9, 0, 4, COBBLE_WALL, 1); S(9, 0, 6, FARMLAND, 7); S(9, 1, 6, CARROTS, 7);
             S(9, 0, 8, FARMLAND, 7); S(9, 1, 8, POTATOES, 3); S(9, 0, 10, COMMAND_BLOCK); S(9, 0, 12, EMERALD_BLOCK);
+            S(6, 0, 14, COBBLE); S(6, 1, 14, COBBLE);
+            if (placeItemFrame(mobMgr.paintings, *world, o + glm::ivec3(6, 0, 14), glm::ivec3(-1, 0, 0)))
+                mobMgr.paintings.back().item = makeStack(DIAMOND_SWORD);
+            if (placeItemFrame(mobMgr.paintings, *world, o + glm::ivec3(6, 0, 14), glm::ivec3(0, 0, -1))) {
+                mobMgr.paintings.back().item = makeStack(GLOWSTONE);
+                mobMgr.paintings.back().rotation = 1;
+            } S(5, 1, 14, SKULL_BLOCK, 4 | 8 | (2 << 4)); S(6, 1, 13, SKULL_BLOCK, 2 | 8 | (3 << 4));
+            S(1, 0, 3, FLOWER_POT, 1); S(1, 0, 4, FLOWER_POT, 3); S(1, 0, 5, FLOWER_POT, 9); S(1, 0, 6, FLOWER_POT, 11); S(1, 0, 7, FLOWER_POT, 7);
             const MobType row142[] = {MobType::Zombie, MobType::PigZombie, MobType::ZombieVillager, MobType::WitherSkeleton, MobType::Witch,
                                       MobType::Skeleton};
             // Загон под навесом (иначе нежить горит на солнце и за огнём текстуры не видно)
@@ -4826,7 +4900,7 @@ int main(int argc, char** argv) {
         player.motion = glm::vec3(0.f);
         const char* sy = std::getenv("MC_SHOW_YAW");
         player.yaw = sy ? (float)std::atof(sy) : 0.f;
-        player.pitch = -35.f;
+        { const char* sp = std::getenv("MC_SHOW_PITCH"); player.pitch = sp ? (float)std::atof(sp) : -35.f; }
         showcaseHold = 60;
         if (std::getenv("MC_SHOW_END")) {
             // Портал Края на площадке и игрок в нём — проверка перехода в Край
@@ -6282,11 +6356,20 @@ int main(int argc, char** argv) {
                     uint8_t cb = world->getBlock(p.x, p.y, p.z);
                     if (cb == SKULL_BLOCK) {
                         // Голова 8x8x8 с развёрткой (0,0) текстуры моба; биты 4-7 меты — поворот к игроку (по 22.5°)
-                        int kind = std::min(4, world->getMeta(p.x, p.y, p.z) & 7);
-                        float yawDeg = (world->getMeta(p.x, p.y, p.z) >> 4) * 22.5f;
+                        uint8_t sm = world->getMeta(p.x, p.y, p.z);
+                        int kind = std::min(4, sm & 7);
+                        float yawDeg = ((sm >> 4) & 15) * 22.5f;
+                        glm::vec3 feet(p.x + 0.5f, p.y - 1.5f, p.z + 0.5f);
+                        if (sm & 8) {
+                            // На стене: голова прижата к стене, низ на 0.25, смотрит от стены
+                            static const float SX[4] = {1, 0, -1, 0}, SZ[4] = {0, 1, 0, -1};
+                            int side = (sm >> 4) & 3;
+                            yawDeg = side * 90.f;
+                            feet += glm::vec3(-SX[side] * 0.25f, 0.25f, -SZ[side] * 0.25f);
+                        }
                         ModelPart head;
                         head.boxes.push_back({-4.f, -8.f, -4.f, 8, 8, 8, 0, 0});
-                        glm::mat4 hm = entityMatrix(glm::vec3(p.x + 0.5f, p.y - 1.5f, p.z + 0.5f), yawDeg);
+                        glm::mat4 hm = entityMatrix(feet, yawDeg);
                         static const MobType SKULL_MOB[5] = {MobType::Skeleton, MobType::WitherSkeleton, MobType::Zombie, MobType::Zombie,
                                                              MobType::Creeper};
                         float texH = kind == 3 ? 32.f : 64.f * mobTexAspect[(int)SKULL_MOB[kind]];
@@ -6333,6 +6416,7 @@ int main(int argc, char** argv) {
             std::vector<Vertex> pv;
             const float TX = 1.f / 256.f;
             for (const Painting& pt : mobMgr.paintings) {
+                if (pt.frame) continue;
                 const PaintingArt& a = PAINTING_ARTS[pt.art];
                 glm::vec3 n = pt.normal(), r = pt.right(), up(0, 1, 0), c = pt.center();
                 if (glm::length(c - eye) > 64.f) continue;
@@ -6363,6 +6447,70 @@ int main(int argc, char** argv) {
             }
             glBindTexture(GL_TEXTURE_2D, paintingTex);
             drawDynamic(pv);
+            glBindTexture(GL_TEXTURE_2D, terrainTex);
+        }
+
+        // Рамки для предметов (RenderItemFrame 1.4.2): задник — тайл рамки (9,11), бортик из досок, предмет — половинного
+        // размера, блоки маленьким кубиком, остальное плоской иконкой; поворот по 90°
+        {
+            std::vector<Vertex> tv, iv;
+            const float TS16 = 1.f / 16.f, px = 1.f / 16.f;
+            for (const Painting& fr : mobMgr.paintings) {
+                if (!fr.frame || fr.dead) continue;
+                glm::vec3 n = fr.normal(), r = fr.right(), up(0, 1, 0);
+                glm::vec3 wf = glm::vec3(fr.wall) + 0.5f + n * 0.5f; // центр грани стены
+                if (glm::length(wf - eye) > 64.f) continue;
+                glm::ivec3 cell = fr.wall + glm::ivec3(glm::round(n));
+                float sky = world->getSkyLight(cell.x, cell.y, cell.z) / 15.f, bl = world->getBlockLight(cell.x, cell.y, cell.z) / 15.f;
+                auto quad = [&](std::vector<Vertex>& out, glm::vec3 o0, glm::vec3 du, glm::vec3 dv, float u0, float v0, float u1, float v1, float shade) {
+                    glm::vec3 A = o0, B = o0 + du, C = o0 + du + dv, D = o0 + dv;
+                    Vertex va{A.x, A.y, A.z, u0, v1, shade, sky, bl}, vb{B.x, B.y, B.z, u1, v1, shade, sky, bl};
+                    Vertex vc{C.x, C.y, C.z, u1, v0, shade, sky, bl}, vd{D.x, D.y, D.z, u0, v0, shade, sky, bl};
+                    out.insert(out.end(), {va, vb, vc, va, vc, vd});
+                };
+                // Коробка в осях рамки (r, up, n) из пикселей: грани с тайлом t
+                auto box = [&](float x0, float y0, float z0, float x1, float y1, float z1, int t) {
+                    float tu = (t % 16) * TS16, tv0 = (t / 16) * TS16;
+                    auto P = [&](float x, float y, float z) { return wf + r * (x * px) + up * (y * px) + n * (z * px); };
+                    auto U = [&](float a) { return tu + (a + 8.f) / 16.f * TS16; };
+                    auto V = [&](float b) { return tv0 + (8.f - b) / 16.f * TS16; };
+                    quad(tv, P(x0, y0, z1), r * ((x1 - x0) * px), up * ((y1 - y0) * px), U(x0), V(y1), U(x1), V(y0), 1.f);      // лицо
+                    quad(tv, P(x1, y0, z0), -r * ((x1 - x0) * px), up * ((y1 - y0) * px), U(x0), V(y1), U(x1), V(y0), 0.8f);   // изнанка
+                    quad(tv, P(x0, y1, z1), r * ((x1 - x0) * px), -n * ((z1 - z0) * px), U(x0), V(y1), U(x1), V(y1 - 1), 1.f);  // верх
+                    quad(tv, P(x0, y0, z0), r * ((x1 - x0) * px), n * ((z1 - z0) * px), U(x0), V(y0 + 1), U(x1), V(y0), 0.5f);  // низ
+                    quad(tv, P(x0, y0, z0), n * ((z1 - z0) * px), up * ((y1 - y0) * px), U(x0), V(y1), U(x0 + 1), V(y0), 0.6f); // левый
+                    quad(tv, P(x1, y0, z1), -n * ((z1 - z0) * px), up * ((y1 - y0) * px), U(x1 - 1), V(y1), U(x1), V(y0), 0.6f);
+                };
+                box(-5, -5, 0, 5, 5, 0.5f, T(9, 11));  // задник
+                box(-6, -6, 0, 6, -5, 1, T(4, 0));     // бортик из досок
+                box(-6, 5, 0, 6, 6, 1, T(4, 0));
+                box(-6, -5, 0, -5, 5, 1, T(4, 0));
+                box(5, -5, 0, 6, 5, 1, T(4, 0));
+                if (fr.item.empty()) continue;
+                // Поворот предмета вокруг нормали
+                float ang = fr.rotation * glm::half_pi<float>();
+                glm::vec3 ru = r * std::cos(ang) + up * std::sin(ang), uu = up * std::cos(ang) - r * std::sin(ang);
+                if (itemIsCube(fr.item)) {
+                    std::vector<Vertex> model;
+                    appendBlockModel(model, (uint8_t)fr.item.id, 1.f, 0.f,
+                                     blockHasVariants((uint8_t)fr.item.id) ? (uint8_t)fr.item.damage : (uint8_t)3);
+                    glm::mat4 m(1.f);
+                    m[0] = glm::vec4(ru, 0.f); m[1] = glm::vec4(uu, 0.f); m[2] = glm::vec4(n, 0.f);
+                    m[3] = glm::vec4(wf + n * (1.f / 16.f), 1.f);
+                    m = glm::scale(m, glm::vec3(0.375f));
+                    m = glm::translate(m, glm::vec3(-0.5f, -0.5f, 0.f));
+                    appendTransformed(tv, model, m, sky, bl);
+                } else {
+                    int col, row;
+                    bool fromItems;
+                    itemTile(fr.item, col, row, fromItems);
+                    float u0 = col / 16.f, v0 = row / 16.f, du = 1.f / 16.f;
+                    glm::vec3 o0 = wf + n * (1.f / 16.f + 0.004f) - ru * 0.25f - uu * 0.25f;
+                    quad(fromItems ? iv : tv, o0, ru * 0.5f, uu * 0.5f, u0, v0, u0 + du, v0 + du, 1.f);
+                }
+            }
+            if (!tv.empty()) { glBindTexture(GL_TEXTURE_2D, terrainUiTex); drawDynamic(tv); }
+            if (!iv.empty()) { glBindTexture(GL_TEXTURE_2D, itemsTex); drawDynamic(iv); }
             glBindTexture(GL_TEXTURE_2D, terrainTex);
         }
 

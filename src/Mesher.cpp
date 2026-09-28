@@ -428,6 +428,27 @@ void World::buildMesh(Chunk& c) {
                         emitBox(mesh[MESH_SOLID], base, {3 * k, 3 * k, 3 * k}, {13 * k, 14 * k, 13 * k}, core, 63, ownSky, ownBl);
                     } else if (shape == Shape::FlowerPot) {
                         emitBox(mesh[MESH_CUTOUT], base, {5 * k, 0, 5 * k}, {11 * k, 6 * k, 11 * k}, tex, edgeMask | 0x37, ownSky, ownBl);
+                        uint8_t pb, pm;
+                        if (flowerPotPlant(meta, pb, pm)) {
+                            // Растение в горшке (RenderBlocks.renderBlockFlowerpot): крест в 3/4 размера от высоты 1/4
+                            if (pb == CACTUS) {
+                                int ct[6];
+                                for (int d = 0; d < 6; ++d) ct[d] = blockTex(CACTUS, d, 0);
+                                emitBox(mesh[MESH_CUTOUT], base, {6 * k, 4 * k, 6 * k}, {10 * k, 1.f, 10 * k}, ct, 63, ownSky, ownBl);
+                            } else {
+                                int t = blockTex(pb, 4, pm);
+                                glm::vec3 col = tint(tintType(pb, 4, pm), x, z);
+                                float u0 = (t % 16) * TS + EPS, u1 = (t % 16 + 1) * TS - EPS, vT = (t / 16) * TS + EPS, vB = (t / 16 + 1) * TS - EPS;
+                                const float a = 0.5f - 0.35f * 0.75f, c = 0.5f + 0.35f * 0.75f, y0 = 0.25f, y1 = 0.25f + 0.75f;
+                                const float px[2][2] = {{a, c}, {a, c}}, pz[2][2] = {{a, c}, {c, a}};
+                                for (int q = 0; q < 2; ++q) {
+                                    glm::vec3 p0 = base + glm::vec3(px[q][0], y0, pz[q][0]), p1 = base + glm::vec3(px[q][1], y0, pz[q][1]);
+                                    quad2(mesh[MESH_CUTOUT], V(p0.x, p0.y, p0.z, u0, vB, 0.9f, ownSky, ownBl, col),
+                                          V(p0.x, base.y + y1, p0.z, u0, vT, 0.9f, ownSky, ownBl, col),
+                                          V(p1.x, base.y + y1, p1.z, u1, vT, 0.9f, ownSky, ownBl, col), V(p1.x, p1.y, p1.z, u1, vB, 0.9f, ownSky, ownBl, col));
+                                }
+                            }
+                        }
                     } else {
                         // Наковальня (renderBlockAnvilOrient 1.4.2): четыре коробки, верхняя грань верхней — своя текстура;
                         // бит 0 меты — длинная сторона вдоль X

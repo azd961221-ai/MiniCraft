@@ -53,13 +53,14 @@ float paintOff(int size) { return (size == 32 || size == 64) ? 0.5f : 0.f; } // 
 glm::vec3 Painting::normal() const { return PAINT_N[dir & 3]; }
 glm::vec3 Painting::right() const { return glm::cross(-normal(), glm::vec3(0, 1, 0)); }
 glm::vec3 Painting::center() const {
+    if (frame) return glm::vec3(wall) + 0.5f + normal() * (0.5f + 1.f / 32.f);
     const PaintingArt& a = PAINTING_ARTS[art];
     return glm::vec3(wall) + 0.5f + normal() * 0.5625f + right() * paintOff(a.w) + glm::vec3(0, paintOff(a.h), 0);
 }
 void Painting::bounds(glm::vec3& mn, glm::vec3& mx) const {
     const PaintingArt& a = PAINTING_ARTS[art];
-    glm::vec3 e = glm::abs(right()) * (a.w / 32.f - 0.00625f) + glm::vec3(0, a.h / 32.f - 0.00625f, 0) +
-                  glm::abs(normal()) * (1.f / 32.f - 0.00625f);
+    float hw = frame ? 6.f / 16.f : a.w / 32.f, hh = frame ? 6.f / 16.f : a.h / 32.f;
+    glm::vec3 e = glm::abs(right()) * (hw - 0.00625f) + glm::vec3(0, hh - 0.00625f, 0) + glm::abs(normal()) * (1.f / 32.f - 0.00625f);
     glm::vec3 c = center();
     mn = c - e;
     mx = c + e;
@@ -69,15 +70,19 @@ bool paintingFits(const Painting& p, const World& w, const std::vector<Painting>
     glm::vec3 mn, mx;
     p.bounds(mn, mx);
     if (anyCollision(w, AABB{mn, mx})) return false;
-    const PaintingArt& a = PAINTING_ARTS[p.art];
-    glm::vec3 r = p.right(), c = p.center() - p.normal() * 0.5625f; // плоскость стены (центры её блоков)
-    glm::vec3 corner = c - r * (a.w / 32.f) - glm::vec3(0, a.h / 32.f, 0);
-    for (int i = 0; i < a.w / 16; ++i)
-        for (int j = 0; j < a.h / 16; ++j) {
-            glm::vec3 q = corner + r * (i + 0.5f) + glm::vec3(0, j + 0.5f, 0);
-            uint8_t b = w.getBlock((int)std::floor(q.x), (int)std::floor(q.y), (int)std::floor(q.z));
-            if (!isSolid(b)) return false;
-        }
+    if (p.frame) {
+        if (!isSolid(w.getBlock(p.wall.x, p.wall.y, p.wall.z))) return false;
+    } else {
+        const PaintingArt& a = PAINTING_ARTS[p.art];
+        glm::vec3 r = p.right(), c = p.center() - p.normal() * 0.5625f; // плоскость стены (центры её блоков)
+        glm::vec3 corner = c - r * (a.w / 32.f) - glm::vec3(0, a.h / 32.f, 0);
+        for (int i = 0; i < a.w / 16; ++i)
+            for (int j = 0; j < a.h / 16; ++j) {
+                glm::vec3 q = corner + r * (i + 0.5f) + glm::vec3(0, j + 0.5f, 0);
+                uint8_t b = w.getBlock((int)std::floor(q.x), (int)std::floor(q.y), (int)std::floor(q.z));
+                if (!isSolid(b)) return false;
+            }
+    }
     for (const Painting& o : others) {
         if (o.dead || &o == &p) continue;
         glm::vec3 omn, omx;
@@ -100,6 +105,17 @@ bool placePainting(std::vector<Painting>& ps, const World& w, const glm::ivec3& 
     if (ok.empty()) return false;
     rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
     p.art = ok[rng % ok.size()];
+    ps.push_back(p);
+    return true;
+}
+
+bool placeItemFrame(std::vector<Painting>& ps, const World& w, const glm::ivec3& wall, const glm::ivec3& face) {
+    if (face.y != 0 || std::abs(face.x) + std::abs(face.z) != 1) return false;
+    Painting p;
+    p.frame = true;
+    p.wall = wall;
+    p.dir = face.z < 0 ? 0 : face.x < 0 ? 1 : face.z > 0 ? 2 : 3;
+    if (!paintingFits(p, w, ps)) return false;
     ps.push_back(p);
     return true;
 }
