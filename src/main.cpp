@@ -1222,13 +1222,15 @@ int main(int argc, char** argv) {
     guiTex2.furnace = makeTexture(furnaceImg);
     guiTex2.container = makeTexture(containerImg);
     {
-        Image trapImg, enchImg, alchImg;
+        Image trapImg, enchImg, alchImg, repairImg;
         load("gui/trap.png", trapImg);
         load("gui/enchant.png", enchImg);
         load("gui/alchemy.png", alchImg);
+        load("gui/repair.png", repairImg);
         guiTex2.trap = makeTexture(trapImg);
         guiTex2.enchant = makeTexture(enchImg);
         guiTex2.alchemy = makeTexture(alchImg);
+        guiTex2.repair = makeTexture(repairImg);
     }
     guiTex2.allitems = makeTexture(allitemsImg);
     guiTex2.creativeList = makeTexture(creativeListImg);
@@ -1707,11 +1709,27 @@ int main(int argc, char** argv) {
         throwFromPlayer(items, player.eye(), player.look(), s, gameRng);
     };
 
+    glm::ivec3 anvilPos(0); // наковальня, чьё окно открыто
     auto makeCtx = [&](float mxG, float myG) {
         GuiContext c{ui, guiTex2, lastSc, lastW, lastH, mxG, myG, inv, throwItem};
         c.xpLevel = &player.xpLevel;
         c.creative = player.creative();
         c.effects = &player.effects;
+        c.onAnvilUse = [&]() {
+            // BlockAnvil 1.4.2: после работы с шансом 12% изнашивается (целая → повреждённая → сильно → ломается)
+            glm::vec3 sp = glm::vec3(anvilPos) + 0.5f;
+            if (world && world->getBlock(anvilPos.x, anvilPos.y, anvilPos.z) == ANVIL && !player.creative() && rnd() < 0.12f) {
+                uint8_t m = world->getMeta(anvilPos.x, anvilPos.y, anvilPos.z);
+                int dmg = ((m >> 2) & 3) + 1;
+                if (dmg > 2) {
+                    world->setBlock(anvilPos.x, anvilPos.y, anvilPos.z, AIR);
+                    audio.play("random/anvil_break", 1.f, rnd() * 0.1f + 0.9f, &sp); // окно закроется в основном цикле
+                    return;
+                }
+                world->setBlock(anvilPos.x, anvilPos.y, anvilPos.z, ANVIL, (uint8_t)((m & 3) | (dmg << 2)));
+            }
+            audio.play("random/anvil_use", 1.f, rnd() * 0.1f + 0.9f, &sp);
+        };
         return c;
     };
 
@@ -2462,6 +2480,9 @@ int main(int argc, char** argv) {
         // Крышка открытого сундука поднимается, остальные опускаются (по 0.1 за тик)
         {
             int64_t openKey = INT64_MIN;
+            if (g_in.screen == Screen::Container && gui.kind == GuiKind::Anvil && world &&
+                world->getBlock(anvilPos.x, anvilPos.y, anvilPos.z) != ANVIL)
+                closeGui(); // наковальня сломалась или её убрали
             if (g_in.screen == Screen::Container && gui.kind == GuiKind::Chest && gui.tile &&
                 (world->getBlock(gui.tile->x, gui.tile->y, gui.tile->z) == CHEST || world->getBlock(gui.tile->x, gui.tile->y, gui.tile->z) == ENDER_CHEST))
                 openKey = posKey(gui.tile->x, gui.tile->y, gui.tile->z);
@@ -3251,7 +3272,10 @@ int main(int argc, char** argv) {
             if (aimingGui) {
                 if (g_in.placeClick) {
                     if (target == CRAFTING_TABLE) openGui(GuiKind::Crafting, nullptr);
-                    else if (target == ENDER_CHEST) {
+                    else if (target == ANVIL) {
+                        anvilPos = hit;
+                        openGui(GuiKind::Anvil, nullptr);
+                    } else if (target == ENDER_CHEST) {
                         // Эндер-сундук: личный инвентарь игрока (раньше открывалось окно печи и на месте появлялась «печь»)
                         if (!world->chestBlocked(hit.x, hit.y, hit.z)) {
                             player.enderChest.type = TileEntity::Chest;
@@ -4957,6 +4981,11 @@ int main(int argc, char** argv) {
                                          makeStack(ITEM_FRAME_ITEM), makeStack(PLANKS, 64, 1)};
             for (int i = 0; i < 9; ++i) inv.slots[i] = bar142[i];
             world->setBlock(o.x, o.y + 2, o.z + 9, ENDER_CHEST, 5); // эндер-сундук у игрока (ПКМ — личный инвентарь)
+            world->setBlock(o.x, o.y + 2, o.z + 10, ANVIL, 1);      // наковальня рядом (ремонт)
+            inv.slots[9] = makeStack(DIAMOND_PICKAXE);
+            inv.slots[9].damage = 1200;
+            inv.slots[10] = makeStack(DIAMOND, 3);
+            player.xpLevel = 30;
             player.enderChest.items[0] = makeStack(DIAMOND, 5);
         }
         g_in.selected = 2;

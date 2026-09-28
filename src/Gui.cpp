@@ -384,6 +384,10 @@ void ContainerScreen::close(GuiContext& ctx) {
     craftOut_.clear();
     giveBack(cursor);
     giveBack(enchantItem_);
+    giveBack(anvilIn_[0]);
+    giveBack(anvilIn_[1]);
+    anvilOut_.clear();
+    anvilCost_ = 0;
     trashStack_.clear();
     kind = GuiKind::None;
     tile = nullptr;
@@ -454,6 +458,12 @@ std::vector<ContainerScreen::Slot> ContainerScreen::slots(GuiContext& ctx) {
         if (tile)
             for (int r = 0; r < 3; ++r)
                 for (int c = 0; c < 3; ++c) add(62.f + c * 18, 17.f + r * 18, &tile->items[r * 3 + c], Role::Normal, CONTAINER, r * 3 + c);
+        playerInv(84, 142);
+        break;
+    case GuiKind::Anvil:
+        add(27, 47, &anvilIn_[0], Role::Normal, CONTAINER, 0);
+        add(76, 47, &anvilIn_[1], Role::Normal, CONTAINER, 1);
+        add(134, 47, &anvilOut_, Role::AnvilOut, OUTPUT, 2);
         playerInv(84, 142);
         break;
     case GuiKind::Enchant:
@@ -532,6 +542,87 @@ void ContainerScreen::consumeCraft() {
     updateCraft();
 }
 
+// ---------------------------------------------------------------- Наковальня
+
+namespace {
+// Чем чинится предмет на наковальне (Item.getIsRepairable / EnumToolMaterial, EnumArmorMaterial 1.4.2)
+uint16_t repairMaterial(uint16_t id) {
+    if (id >= LEATHER_HELMET && id <= LEATHER_BOOTS) return LEATHER;
+    if ((id >= CHAIN_HELMET && id <= CHAIN_BOOTS) || (id >= IRON_HELMET && id <= IRON_BOOTS)) return IRON_INGOT;
+    if (id >= DIAMOND_HELMET && id <= DIAMOND_BOOTS) return DIAMOND;
+    if (id >= GOLD_HELMET && id <= GOLD_BOOTS) return GOLD_INGOT;
+    ToolInfo t = toolInfo(id);
+    if (t.type == Tool::None) return 0;
+    if (id == GOLD_SWORD || id == GOLD_SHOVEL || id == GOLD_PICKAXE || id == GOLD_AXE || id == GOLD_HOE) return GOLD_INGOT;
+    switch (t.tier) {
+    case 0: return PLANKS;
+    case 1: return COBBLE;
+    case 2: return IRON_INGOT;
+    default: return DIAMOND;
+    }
+}
+int enchCount(const ItemStack& s) {
+    int n = 0;
+    for (uint16_t e : s.ench) n += e != 0;
+    return n;
+}
+} // namespace
+
+// ContainerRepair.updateRepairOutput 1.4.2 без переименования (у ItemStack нет имени) и без «стоимости прошлых работ»:
+// ремонт материалом (каждая штука — четверть прочности) или слияние двух одинаковых предметов с чарами
+void ContainerScreen::updateAnvil() {
+    anvilOut_.clear();
+    anvilCost_ = 0;
+    anvilMaterial_ = 0;
+    const ItemStack &a = anvilIn_[0], &b = anvilIn_[1];
+    if (a.empty() || b.empty()) return;
+    int maxD = maxDamage(a.id);
+    ItemStack out = a;
+    int cost = 0;
+    if (maxD > 0 && b.id == repairMaterial(a.id) && b.id != 0) {
+        int step = std::min<int>(out.damage, maxD / 4);
+        if (step <= 0) return;
+        int n = 0;
+        for (; step > 0 && n < b.count; ++n) {
+            out.damage = (uint16_t)(out.damage - step);
+            cost += std::max(1, step / 100) + enchCount(a);
+            step = std::min<int>(out.damage, maxD / 4);
+        }
+        anvilMaterial_ = n;
+    } else {
+        if (b.id != a.id || maxD <= 0) return;
+        // Прочность: остаток обоих плюс 12% максимума; цена — от добавленной второй вещью прочности
+        int added = (maxD - b.damage) + maxD * 12 / 100;
+        int newDamage = std::max(0, maxD - (maxD - a.damage) - added);
+        if (newDamage < out.damage) {
+            out.damage = (uint16_t)newDamage;
+            cost += std::max(1, added / 100);
+        }
+        // Чары второго предмета: одинаковые уровни дают +1, иначе больший; несовместимые пропускаются
+        for (uint16_t e : b.ench) {
+            if (!e) continue;
+            int id = e >> 8, lvl = e & 0xFF;
+            if (!enchantApplies(id, a.id)) continue;
+            bool clash = false;
+            for (uint16_t f : out.ench)
+                if (f && (f >> 8) != id && !enchCompatible(id, f >> 8)) clash = true;
+            if (clash) continue;
+            int cur = out.enchLevel(id);
+            int nl = std::min(enchMaxLevel(id), cur == lvl ? lvl + 1 : std::max(cur, lvl));
+            if (nl == cur) continue;
+            int w = enchWeight(id), per = w >= 10 ? 1 : w >= 5 ? 2 : w >= 2 ? 4 : 8;
+            cost += per * nl;
+            bool set = false;
+            for (uint16_t& f : out.ench)
+                if (f && (f >> 8) == id) { f = (uint16_t)((id << 8) | nl); set = true; }
+            if (!set) out.addEnch(id, nl);
+        }
+    }
+    if (cost <= 0) return;
+    anvilCost_ = cost;
+    anvilOut_ = out;
+}
+
 // ---------------------------------------------------------------- Зачарование
 
 void ContainerScreen::refreshEnchant(GuiContext&) {
@@ -601,6 +692,8 @@ void ContainerScreen::shiftMove(GuiContext& ctx, Slot& sl) {
                 tile->items[i].count = 1;
                 if (--s.count == 0) s.clear();
             }
+    } else if (kind == GuiKind::Anvil) {
+        moveInto(s, anvilIn_, 2);
     } else if (kind == GuiKind::Enchant && enchantItem_.empty() && itemEnchantability(s.id) > 0) {
         enchantItem_ = s;
         enchantItem_.count = 1;
@@ -646,6 +739,27 @@ void ContainerScreen::clickSlot(GuiContext& ctx, Slot& sl, int button, bool shif
         if (!cursor.empty()) { cursor.clear(); return; } // творческий: клик по палитре удаляет предмет
         cursor = s;
         cursor.count = (uint8_t)(button == 0 ? maxStackSize(s.id) : 1);
+        return;
+    }
+
+    if (sl.role == Role::AnvilOut) {
+        // Забрать результат: плата уровнями, «Too Expensive!» от 40 (не в творческом), первый слот уходит целиком
+        if (s.empty()) return;
+        if (!ctx.creative && (anvilCost_ >= 40 || !ctx.xpLevel || *ctx.xpLevel < anvilCost_)) return;
+        if (shift) {
+            ItemStack r = s;
+            if (!ctx.inv.add(r)) return;
+        } else if (cursor.empty()) {
+            cursor = s;
+        } else {
+            return;
+        }
+        if (!ctx.creative && ctx.xpLevel) *ctx.xpLevel -= anvilCost_;
+        anvilIn_[0].clear();
+        if (anvilMaterial_ > 0 && anvilIn_[1].count > anvilMaterial_) anvilIn_[1].count = (uint8_t)(anvilIn_[1].count - anvilMaterial_);
+        else anvilIn_[1].clear();
+        if (ctx.onAnvilUse) ctx.onAnvilUse();
+        updateAnvil();
         return;
     }
 
@@ -743,7 +857,7 @@ void ContainerScreen::clickSlot(GuiContext& ctx, Slot& sl, int button, bool shif
             std::swap(s, cursor);
         }
     }
-    if (sl.group == CONTAINER) updateCraft();
+    if (sl.group == CONTAINER) { updateCraft(); if (kind == GuiKind::Anvil) updateAnvil(); }
 }
 
 void ContainerScreen::mouseDown(GuiContext& ctx, int button, bool shift) {
@@ -871,6 +985,25 @@ void ContainerScreen::draw(GuiContext& ctx) {
         title("Dispenser", 60, 6);
         title("Inventory", 8, 72);
         break;
+    case GuiKind::Anvil: {
+        updateAnvil(); // входы меняются и Shift-кликом, и цифрами хотбара
+        img(ctx.tex.repair, 0, 0, 0, 0, 176, 166);
+        title("Repair & Name", 60, 6);
+        title("Inventory", 8, 72);
+        // Поле имени (переименования нет — показываем имя предмета), крестик на стрелке, если результата нет
+        img(ctx.tex.repair, 59, 20, 0, anvilIn_[0].empty() ? 182.f : 166.f, 110, 16);
+        if (!anvilIn_[0].empty()) ui.text(itemName(anvilIn_[0]), (px + 62) * sc, (py + 24) * sc, sc, glm::vec4(0.88f, 0.88f, 0.88f, 1));
+        if (!anvilIn_[0].empty() && !anvilIn_[1].empty() && anvilOut_.empty()) img(ctx.tex.repair, 99, 45, 176, 0, 28, 21);
+        if (anvilCost_ > 0) {
+            bool expensive = anvilCost_ >= 40 && !ctx.creative;
+            bool can = ctx.creative || (ctx.xpLevel && *ctx.xpLevel >= anvilCost_);
+            std::string t = expensive ? "Too Expensive!" : "Enchantment Cost: " + std::to_string(anvilCost_);
+            float tw = ui.textWidth(t, sc) / sc;
+            ui.text(t, (px + 168 - tw) * sc, (py + 69) * sc, sc,
+                    !expensive && can ? glm::vec4(0.5f, 1.f, 0.125f, 1) : glm::vec4(1.f, 0.38f, 0.38f, 1));
+        }
+        break;
+    }
     case GuiKind::Enchant: {
         img(ctx.tex.enchant, 0, 0, 0, 0, 176, 166);
         title("Enchant", 12, 5);

@@ -22,5 +22,10 @@ int itemEnchantability(uint16_t id);
 int enchantTableLevel(uint32_t& rng, int slot, int shelves, uint16_t itemId);
 // Чары для предмета на уровне level (buildEnchantmentList)
 std::vector<std::pair<int, int>> pickEnchantments(uint32_t& rng, uint16_t itemId, int level);
+// Для наковальни (ContainerRepair 1.4.2): применима ли чара к предмету, макс. уровень, вес, совместимость
+bool enchantApplies(int id, uint16_t item);
+int enchMaxLevel(int id);
+int enchWeight(int id);
+bool enchCompatible(int a, int b);
 // Снижение урона чарами брони (EnchantmentProtection): source 0 обычный, 1 огонь, 2 падение, 3 взрыв, 4 снаряд
 int armorProtectionPoints(const ItemStack armor[4], int source);

@@ -66,6 +66,24 @@ bool applies(const EnchDef& d, uint16_t item) {
 
 } // namespace
 
+bool enchantApplies(int id, uint16_t item) {
+    const EnchDef* d = def(id);
+    return d && applies(*d, item);
+}
+int enchMaxLevel(int id) {
+    const EnchDef* d = def(id);
+    return d ? d->maxLevel : 1;
+}
+int enchWeight(int id) {
+    const EnchDef* d = def(id);
+    return d ? d->weight : 1;
+}
+bool enchCompatible(int a, int b) {
+    if (a == b) return true;
+    const EnchDef *da = def(a), *db = def(b);
+    return !da || !db || da->group == 0 || da->group != db->group;
+}
+
 const char* enchName(int id) {
     const EnchDef* d = def(id);
     return d ? d->name : "?";

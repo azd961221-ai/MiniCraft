@@ -6,11 +6,11 @@
 #include "Player.h"
 #include "UI.h"
 
-enum class GuiKind { None, Inventory, Creative, Crafting, Furnace, Chest, Dispenser, Enchant, Brewing };
+enum class GuiKind { None, Inventory, Creative, Crafting, Furnace, Chest, Dispenser, Enchant, Brewing, Anvil };
 
 struct GuiTextures {
     GLuint gui = 0, inventory = 0, crafting = 0, furnace = 0, container = 0, allitems = 0, items = 0, terrain = 0, trap = 0;
-    GLuint enchant = 0, alchemy = 0;
+    GLuint enchant = 0, alchemy = 0, repair = 0;
     GLuint creativeList = 0, creativeSearch = 0, creativeSurvival = 0;
 };
 
@@ -27,6 +27,7 @@ struct GuiContext {
     const std::vector<ActiveEffect>* effects = nullptr; // эффекты зелий (показываются у инвентаря)
     // Стив в окне инвентаря: вызывается после фона (fx, fy — координаты ног, scale — масштаб модели)
     std::function<void(float fx, float fy, float scale)> drawPlayer;
+    std::function<void()> onAnvilUse; // взяли результат с наковальни (износ наковальни, звук)
 };
 
 // Предмет в слоте 16x16 (x, y — левый верхний угол в единицах GUI), с количеством и износом
@@ -52,7 +53,7 @@ public:
     void hotkey(GuiContext& ctx, int hotbarSlot);
 
 private:
-    enum class Role { Normal, CraftOut, FurnaceOut, Armor, Palette };
+    enum class Role { Normal, CraftOut, FurnaceOut, Armor, Palette, AnvilOut };
     enum Group { HOTBAR, MAIN, CONTAINER, ARMOR, OUTPUT, PALETTE };
     struct Slot {
         float x, y;
@@ -62,6 +63,9 @@ private:
         int index;
     };
 
+    ItemStack anvilIn_[2], anvilOut_;
+    int anvilCost_ = 0, anvilMaterial_ = 0; // цена в уровнях; сколько материала ушло на ремонт
+    void updateAnvil();
     ItemStack enchantItem_;
     int enchantLevels_[3] = {0, 0, 0};
     uint32_t enchantRng_ = 12345u, enchantKey_ = 0xFFFFFFFFu;
